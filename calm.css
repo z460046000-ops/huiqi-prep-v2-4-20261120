@@ -104,24 +104,11 @@ body::before { content:""; display:block; position:fixed; inset:0; z-index:-1; p
 }
 .start-hero-form:has([data-home-intake]) .start-hero-chips { visibility:hidden; }
 
-/* 输入框激活：流动渐变描边 + 背后柔光，角度用 @property 动画旋转。 */
-@property --glow-angle { syntax:'<angle>'; initial-value:0deg; inherits:false; }
-@keyframes glow-spin { to { --glow-angle:360deg; } }
-.start-hero-field::before,.start-hero-field::after { content:""; position:absolute; pointer-events:none; opacity:0; transition:opacity .3s ease; }
-.start-hero-field::before { inset:-1px; padding:1.5px; border-radius:17px; background:conic-gradient(from var(--glow-angle),#5fcbdb,#4f7dff,#ad92ff,#ff9ad5,#5fcbdb); -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0); }
-.start-hero-field::after { inset:-8px; z-index:-1; border-radius:24px; background:conic-gradient(from var(--glow-angle),rgba(95,203,219,.7),rgba(79,125,255,.7),rgba(173,146,255,.7),rgba(255,154,213,.55),rgba(95,203,219,.7)); filter:blur(26px); }
-.start-hero-field:focus-within::before { opacity:1; animation:glow-spin 4s linear infinite; }
-.start-hero-field:focus-within::after { opacity:.6; animation:glow-spin 4s linear infinite; }
-.start-hero-field:focus-within { box-shadow:0 10px 32px rgba(50,80,190,.10); }
-@media (prefers-reduced-motion: reduce) {
-  .start-hero-field:focus-within::before,.start-hero-field:focus-within::after { animation:none; }
-}
-
 /* v2.4b 参考 Iconly：白卡输入框（魔杖图标、提示、圆形渐变发送）＋虹彩大卡片与大号立体图标。 */
 .start-hero-spark { display:block; width:44px; height:44px; margin:0 auto 14px; filter:drop-shadow(0 6px 14px rgba(47,123,255,.35)); }
 .start-hero-field { height:128px; padding:20px 64px 20px 50px; border-radius:20px; border:1px solid #e6eaf2; background:#fff; box-shadow:0 1px 2px rgba(20,30,60,.04),0 14px 40px rgba(60,80,140,.08); }
 .start-hero-field:hover { border-color:#d8deea; background:#fff; box-shadow:0 1px 2px rgba(20,30,60,.04),0 16px 44px rgba(60,80,140,.11); }
-.start-hero-field:focus-within { border-color:transparent; background:#fff; box-shadow:0 14px 40px rgba(60,80,140,.10); }
+.start-hero-field:focus-within { border-color:#88a9df; background:#fff; box-shadow:0 0 0 3px rgba(21,87,230,.10),0 14px 40px rgba(60,80,140,.10); }
 .start-hero-wand { position:absolute; left:20px; top:22px; color:#6b7585; display:flex; }
 .start-hero-field:focus-within .start-hero-wand { color:#4f7dff; }
 .start-hero-field input { font-size:16px; height:26px; line-height:26px; }
@@ -212,11 +199,111 @@ body::before { content:""; display:block; position:fixed; inset:0; z-index:-1; p
 .review-file-link.is-blocked .review-file-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:none; }
 .review-file-link.is-blocked:hover { color:#3c4657; }
 
-/* v2.4f 对话里的企业名称输入框：和首页输入框同一语言——白底细边、12px 圆角；聚焦时渐变描边流动 + 柔光。 */
-@keyframes name-flow { to { background-position:0 0,300% 0; } }
-.intake-name-row>input,.start-quick-form .intake-name-row>input { height:44px; padding:0 14px; border:1px solid transparent; border-radius:12px; background:linear-gradient(#fff,#fff) padding-box,linear-gradient(#e3e7ef,#e3e7ef) border-box; box-shadow:0 1px 2px rgba(20,30,60,.04); color:#141c2b; font-size:14px; transition:box-shadow .25s ease; }
+/* 企业名称输入框和对话输入区使用同一组焦点颜色。 */
+.intake-name-row>input,.start-quick-form .intake-name-row>input { height:44px; padding:0 14px; border:1px solid #e3e7ef; border-radius:12px; background:#fff; box-shadow:0 1px 2px rgba(20,30,60,.04); color:#141c2b; font-size:14px; transition:border-color .16s ease,box-shadow .16s ease; }
 .intake-name-row>input::placeholder { color:#a0a8b6; }
-.intake-name-row>input:hover { background:linear-gradient(#fff,#fff) padding-box,linear-gradient(#d3d9e4,#d3d9e4) border-box; }
-.intake-name-row>input:focus { border-color:transparent; background:linear-gradient(#fff,#fff) padding-box,linear-gradient(90deg,#5fcbdb,#4f7dff,#ad92ff,#ff9ad5,#5fcbdb) border-box; background-size:100% 100%,300% 100%; background-position:0 0,0 0; box-shadow:0 0 0 3px rgba(123,140,255,.18),0 8px 26px rgba(79,125,255,.26); animation:name-flow 4s linear infinite; }
+.intake-name-row>input:hover,.start-quick-form .intake-name-row>input:hover { border-color:#d3d9e4; }
+.intake-name-row>input:focus,.start-quick-form .intake-name-row>input:focus { border-color:#88a9df; box-shadow:0 0 0 3px rgba(21,87,230,.10); }
 @media (max-width:700px) { .intake-name-row>input,.start-quick-form .intake-name-row>input { height:44px; font-size:16px; } }
-@media (prefers-reduced-motion: reduce) { .intake-name-row>input:focus { animation:none; } }
+
+/* Border Beam 参考 https://libraries.dev/beam
+   光束沿圆角边缘移动，完成一圈后回到原有的边框或焦点状态。 */
+@property --huiqi-beam-angle {
+  syntax:"<angle>";
+  initial-value:32deg;
+  inherits:false;
+}
+
+@keyframes huiqi-beam-rotate {
+  from { --huiqi-beam-angle:32deg; }
+  to { --huiqi-beam-angle:392deg; }
+}
+
+@keyframes huiqi-beam-fade {
+  0%,100% { opacity:0; }
+  10%,76% { opacity:1; }
+}
+
+@keyframes huiqi-dialog-in {
+  from { opacity:0; transform:translateY(8px) scale(.985); }
+  to { opacity:1; transform:none; }
+}
+
+@media (prefers-reduced-motion:no-preference) {
+  .leave-dialog section {
+    animation:huiqi-dialog-in .25s cubic-bezier(.16,1,.3,1) both;
+  }
+
+  .intake-name-row>input:focus,.start-quick-form .intake-name-row>input:focus {
+    border-color:transparent;
+    background:linear-gradient(#fff,#fff) padding-box,
+      conic-gradient(from var(--huiqi-beam-angle,32deg),#88a9df 0deg 226deg,
+        #86cde8 268deg,#68dfd7 298deg,#3274f1 319deg,#f2b2cc 331deg,#88a9df 357deg) border-box;
+    animation:huiqi-beam-rotate 2.65s linear;
+  }
+}
+
+@supports (mask-composite:exclude) {
+  @media (prefers-reduced-motion:no-preference) {
+    :where(.task-composer,#adviser-chat-form,#pick-composer-form,
+      .match-policy,.policy-card,.home-grant-card,.work-status-card,.match-result-bar) {
+      position:relative;
+    }
+
+    :where(.start-hero-field,.task-composer,#adviser-chat-form,#pick-composer-form,
+      .start-step-card,.start-expert-body,.match-policy,.policy-card,.prep-card,.home-grant-card,
+      .work-status-card,.match-result-bar,.leave-dialog section,.match-drawer-panel,
+      .workspace-document[role="dialog"])::before {
+      content:"";
+      position:absolute;
+      inset:0;
+      z-index:2;
+      padding:var(--beam-width,2px);
+      border-radius:inherit;
+      background:conic-gradient(from var(--huiqi-beam-angle,32deg),
+        transparent 0deg 225deg,rgba(59,131,246,.12) 250deg,#92d9f5 282deg,
+        #68dfd7 304deg,#3274f1 319deg,#f2b2cc 331deg,transparent 355deg);
+      mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+      mask-composite:exclude;
+      opacity:0;
+      pointer-events:none;
+    }
+
+    :where(.start-hero-field,.task-composer,#adviser-chat-form,#pick-composer-form) {
+      --beam-width:2.5px;
+    }
+
+    :where(.start-hero-field,.task-composer,#adviser-chat-form,#pick-composer-form):focus-within::before,
+    :where(.start-step-card,.start-expert-body,.match-policy,.policy-card,.prep-card,
+      .home-grant-card,.work-status-card):is(:focus-visible,:has(:focus-visible),:active)::before {
+      animation:huiqi-beam-rotate 2.65s linear,huiqi-beam-fade 2.65s ease both;
+    }
+
+    @media (hover:hover) {
+      :where(.start-step-card,.start-expert-body,.match-policy,.policy-card,.prep-card,
+        .home-grant-card,.work-status-card):hover::before {
+        animation:huiqi-beam-rotate 2.65s linear,huiqi-beam-fade 2.65s ease both;
+      }
+    }
+
+    .match-result-bar:has(#match-result-heading)::before {
+      inset:auto 0 -3px;
+      height:2px;
+      padding:0;
+      border-radius:2px;
+      mask:none;
+      background:linear-gradient(90deg,transparent 24%,#74d9e4 44%,#4981f1 53%,#f2b2cc 58%,transparent 78%);
+      background-size:200% 100%;
+      animation:huiqi-beam-line 1.3s ease-out both,huiqi-beam-fade 1.3s ease both;
+    }
+
+    :where(.leave-dialog section,.match-drawer-panel,.workspace-document[role="dialog"])::before {
+      animation:huiqi-beam-rotate 1.9s linear .12s,huiqi-beam-fade 1.9s ease .12s both;
+    }
+  }
+}
+
+@keyframes huiqi-beam-line {
+  from { background-position:100% 0; }
+  to { background-position:0 0; }
+}
