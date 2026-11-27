@@ -581,6 +581,13 @@
     const pending = metrics.filter(row => row.status === 'unknown').length;
     return { score, shown: score === null ? 0 : score, grade, level: grade, pending, judgeable: judgeable.length, missingRequired };
   }
+  // 主体类型 → 是否法人：公司、事业单位、社会组织算法人；个体户、合伙、个人独资、分支机构不算；其他判断不了。
+  function legalEntityOf(type) {
+    if (!type) return null;
+    if (/个体|合伙|个人独资|分公司|分支机构|分所/.test(type)) return 'missing';
+    if (/有限责任公司|股份有限公司|有限公司|事业单位|社会团体|民办非企业|社会服务机构|基金会|全民所有制|集体所有制/.test(type)) return 'ready';
+    return null;
+  }
   /* 对照表行：准入核对（不计分）+ 数值条件（计分，分值按归口）+ 需确认条件（不计分）+ 材料。 */
   function comparisonRows(task, policy) {
     const facts = factsOf(task);
@@ -609,10 +616,15 @@
     });
     // 政策写得不清 / 系统判断不了的条件：列原文，需确认，不计分。
     const conds = (policy.application?.checklist || []).filter(item => item.kind === 'condition');
+    // 对照维度写短名（label），政策要求写原文那句完整要求（require）；没有 require 时用短名 + 备注拼出来。
     (conds.length ? conds : policy.application?.checklist ? [] : policy.conditions).forEach((item, index) => {
       const label = typeof item === 'string' ? item : item.label;
       const note = typeof item === 'string' ? '' : item.note;
-      rows.push({ key: `confirm-${index}`, label, kind: '需确认条件', required: note ? `${note}（以原文为准）` : '以原文为准', current: '按政策原文核对', status: 'tbc', w: 0 });
+      const required = item.require || `${label}${note ? `，${note}` : ''}（以原文为准）`;
+      // 法人资格能按企业地图的主体类型判断，判断不了才需确认。
+      const legal = item.check === 'legalEntity' ? legalEntityOf(facts.type) : null;
+      if (legal) { rows.push({ key: `confirm-${index}`, label, kind: '准入条件', required, current: facts.type, status: legal, w: 0 }); return; }
+      rows.push({ key: `confirm-${index}`, label, kind: '需确认条件', required, current: '按政策原文核对', status: 'tbc', w: 0 });
     });
     rows.push({ key: 'materials', label: '申报材料', kind: '材料（不计入匹配度）', required: items.length ? `${items.length} 项必需材料` : '清单待核实', current: `${ready} 项已上传`, status: items.length ? (ready === items.length ? 'ready' : 'missing') : 'unknown', w: 0, ready, total: items.length, action: '补充材料' });
     // 政策这一项置信度低：记“待确认”，不计分（PRD 8.2.2）。

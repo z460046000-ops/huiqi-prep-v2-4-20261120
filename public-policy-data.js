@@ -102,7 +102,7 @@
           { id: 'scenario-form', label: '北京市住房城乡建设领域创新应用场景表', note: '按官方附件逐项填写，电子版和加盖单位公章的 PDF 扫描件一起发送', expects: ['场景名称', '申报单位', '场景类别', '技术方案', '落地应用案例', '成效', '专利', '软著'] },
           { id: 'photos', label: '应用效果或应用过程照片', required: false, media: true, note: '选填，8～10 张' },
           { id: 'video', label: '应用过程视频', required: false, media: true, note: '选填，不超过 10 分钟' },
-          { id: 'legal-entity', label: '具有独立法人资格', kind: 'condition', note: '' },
+          { id: 'legal-entity', label: '具有独立法人资格', kind: 'condition', check: 'legalEntity', note: '' },
           { id: 'own-ip', label: '持有自主知识产权', kind: 'condition', note: '' },
           { id: 'full-solution', label: '能提供面向住建行业的完整解决方案', kind: 'condition', note: '成套技术、软硬件产品、数字化平台、数据服务等' },
           { id: 'real-project', label: '能在真实工程环境落地、迭代复用', kind: 'condition', note: '' },
@@ -312,7 +312,7 @@
       conditions: [
         '揭榜单位应为国内法人单位，具有组织项目实施的相应能力，接受单独申报与联合申报。',
         '须具备较强的研发实力、良好的科研条件、稳定的科研团队，以及榜单任务要求的其他条件。',
-        '管理制度符合《北京市科技计划项目（课题）管理办法》等有关要求，对申报材料的真实性和完整性负责。',
+        '管理制度完善健全，符合京科资发〔2023〕43号、京科发〔2010〕458号、京技管发〔2026〕7号等文件要求，对申报材料的真实性和完整性负责。',
         '申报材料应对榜单任务需求全覆盖，研究内容、技术路线及考核指标科学、合理、明确，经费预算真实、合理。',
       ],
       materials: ['《北京经济技术开发区“揭榜挂帅”项目申报书》（原文附件2），签字及加盖公章后的彩色扫描版'],
@@ -321,11 +321,10 @@
       demands: [],
       application: {
         checklist: [
-          { id: 'apply-book', label: '“揭榜挂帅”项目申报书', note: '按原文附件2填写，签字加盖公章后彩色扫描', expects: ['榜单任务', '研究内容', '技术路线', '考核指标', '经费预算'] },
-          { id: 'legal-entity', label: '国内法人单位', kind: 'condition', note: '' },
-          { id: 'rd-strength', label: '具备较强研发实力、科研条件和稳定科研团队', kind: 'condition', note: '以及榜单任务要求的其他条件' },
-          { id: 'management-rules', label: '管理制度符合北京市科技计划项目管理办法等要求', kind: 'condition', note: '京科资发〔2023〕43号、京技管发〔2026〕7号等' },
-          { id: 'task-coverage', label: '申报材料对榜单任务需求全覆盖', kind: 'condition', note: '应用示范具备可行性和保障性' },
+          { id: 'apply-book', label: '“揭榜挂帅”项目申报书', note: '按原文附件2填写，签字盖章后彩色扫描；需覆盖榜单任务全部需求', expects: ['榜单任务', '研究内容', '技术路线', '考核指标', '应用示范', '经费预算'] },
+          { id: 'legal-entity', label: '国内法人单位', kind: 'condition', check: 'legalEntity', require: '揭榜单位应为国内法人单位，具有组织项目实施的相应能力；可单独申报或联合申报' },
+          { id: 'rd-strength', label: '研发实力', kind: 'condition', require: '具备较强的研发实力、良好的科研条件、稳定的科研团队，以及榜单任务要求的其他条件' },
+          { id: 'management-rules', label: '管理制度', kind: 'condition', require: '管理制度完善健全，符合《北京市科技计划项目（课题）管理办法》（京科资发〔2023〕43号）、《北京市科技计划管理相关责任主体信用管理办法（试行）》（京科发〔2010〕458号）、《北京经济技术开发区科技计划项目管理办法》（京技管发〔2026〕7号）；对申报材料的真实性和完整性负责' },
         ],
         templates: [{ label: '“揭榜挂帅”项目申报书（原文附件2）', url: 'https://kfqgw.beijing.gov.cn/zwgkkfq/2024zcwj/202611/t20261112_4943503.html' }],
         templateNote: '申报书模板在原文附件2下载，按榜单任务填写。',
