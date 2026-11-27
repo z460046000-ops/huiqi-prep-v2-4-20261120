@@ -346,3 +346,7 @@ body::before { content:""; display:block; position:fixed; inset:0; z-index:-1; p
 .in-project .workspace-summary .workspace-portrait-edit{display:inline-flex;align-items:center;gap:4px;margin:0;font-size:12px;white-space:nowrap}
 .in-project .workspace-summary .workspace-portrait-edit .icon{width:14px;height:14px}
 .in-project .workspace-summary .workspace-portrait{max-height:300px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;row-gap:10px;scrollbar-width:thin;scrollbar-color:#d3dae4 transparent}
+
+/* 政策详情：对照表去掉“操作”列后三列；诊断卡每条一行 */
+.interpret-table thead th:nth-child(1){width:22%}.interpret-table thead th:nth-child(2),.interpret-table thead th:nth-child(3){width:39%}
+.diag-block li.is-required b{white-space:nowrap;padding:0 6px;font-size:11px}
