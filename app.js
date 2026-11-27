@@ -584,7 +584,7 @@
       if (form.matches('.start-hero-form')) {
         window.PolicyMatch.openHomeIntake();
         render();
-        const first=page.querySelector('[data-home-intake] input');
+        const first=page.querySelector('[data-home-intake] input, [data-home-intake] button');
         first?.focus({preventScroll:true});
         return;
       }

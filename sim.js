@@ -10,7 +10,8 @@
     fileBlocked: '上传内容未过审核',
     interpretFail: '白话解读生成失败',
     loggedOut: '未登录',
-    risk: '企业有经营风险',
+    risk: '企业有经营异常记录',
+    dishonest: '企业有严重失信记录',
   };
   let state = {};
   try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { state = {}; }

@@ -24,7 +24,8 @@
     return Boolean(el);
   }
   const JINJIAN = '北京久其金建科技有限公司';
-  const FULL = { type: '有限责任公司', stage: '成长期（成长）', revenue: '5000万-1亿', rd: '4%-5%', talent: '无' };
+  /* 新规则（手册第 2 节）：第一轮只填企业名称，其余按政策追问。FULL 是追问字段都填过的画像。 */
+  const FULL = { revenue: '5000万-1亿', rdFee: '800' };
 
   // 建一个任务并跑到匹配结果；stop 为 'confirm' 时停在企业画像确认卡。
   async function mk(name, answers = {}, stop = '') {
@@ -77,25 +78,25 @@
   }
 
   const items = [
-    { n: 1, stage: '信息采集', title: '查不到企业', how: '输入不完整的企业名称「北京久其金建科技公司」，工商信息查不到。', run: async () => { await mk('北京久其金建科技公司', { type: '有限责任公司' }); await focus('.match-nohit'); } },
-    { n: 1, sub: '接口失败', stage: '信息采集', title: '企业接口失败或超时', how: '真实接口故障无法复现，用模拟开关。不提示核对名称，提示稍后重试。', sims: ['apiTimeout'], run: async () => { await mk(JINJIAN, { type: '有限责任公司' }); await focus('.match-nohit'); } },
-    { n: 2, stage: '信息采集', title: '企业已注销、吊销', how: '北京华宇信码技术有限公司，2026年6月29日完成注销登记（华宇软件公告）。', run: async () => { await mk('北京华宇信码技术有限公司', { type: '有限责任公司' }); await focus('.match-nohit'); } },
-    { n: 3, stage: '信息采集', title: '一个字段都不选就点“确定”', how: '久其金建什么都不选。地区、行业、成立年限由企业接口预填，其余显示“待补充”。', run: async () => { await mk(JINJIAN, {}, 'confirm'); await focus('.portrait-confirm, [data-action="intake-confirm"]'); } },
-    { n: 4, stage: '信息采集', title: '正在申报的政策少于 3 条', how: '上海久其软件有限公司：上海只有智能电网专项 1 条正在申报，企业规模、成立年限没有公开数据，追问一轮。', run: async () => { await mk('上海久其软件有限公司', { type: '有限责任公司' }); await focus('.intake-followup'); } },
-    { n: 5, stage: '匹配', title: '无命中', how: '成都久其软件有限公司：成都、四川和全国都没有正在申报的政策。', run: async () => { await mk('成都久其软件有限公司', { type: '有限责任公司' }); await focus('.match-nohit'); } },
-    { n: 6, stage: '匹配', title: '放宽条件后查到政策', how: '广东久其软件有限公司（广州）：本市和广东省没有正在申报的，扩大到广东省后查到深圳的政策（已截止）。', run: async () => { await mk('广东久其软件有限公司', { type: '有限责任公司' }); await press('[data-action="nohit-pick"][data-key="region"]'); await sleep(300); await press('[data-action="nohit-confirm"]'); await focus('#match-result-heading'); } },
-    { n: 7, stage: '匹配', title: '放宽后仍无结果', how: '成都久其软件有限公司：扩大到四川省后仍然没有，转人工客服。', run: async () => { await mk('成都久其软件有限公司', { type: '有限责任公司' }); await press('[data-action="nohit-pick"][data-key="region"]'); await sleep(300); await press('[data-action="nohit-confirm"]'); await sleep(500); await press('[data-action="nohit-service"]'); await focus('.match-nohit'); } },
-    { n: 8, stage: '匹配', title: '区间条件跨过门槛', how: '2026年度北京高新技术企业认定要求研发费占比不低于 4%（营收 5000 万至 2 亿元一档）。久其金建选“3%-4%”，跨过门槛记“待确认”。北京正在申报的政策不少于 3 条，所以不追问。这项认定已于 9 月 24 日截止。', run: async () => { await mk(JINJIAN, { ...FULL, rd: '3%-4%' }); await openPolicy('bj-hitech-2026'); await focus('#match-drawer .interpret-table'); } },
-    { n: 9, stage: '匹配', title: '匹配度为低、行业不符', how: 'AI4Chip 项目只面向经开区集成电路企业，久其金建做建筑行业信息化。', run: async () => { await mk(JINJIAN, FULL); await focus('[data-policy="bj-ai4chip-2026"]'); } },
-    { n: 10, stage: '匹配', title: '政策没写金额', how: '住建领域创新应用场景征集，原文没有写资助金额。', run: async () => { await mk(JINJIAN, FULL); await openPolicy('bj-zjw-scenarios-2026'); await focus('#match-drawer .interpret-overview'); } },
-    { n: 11, stage: '诊断', title: '企业有经营风险', how: '没有找到可公开核验的真实经营异常记录，用模拟开关，记录上写明“模拟”。', sims: ['risk'], run: async () => { await mk(JINJIAN, FULL); await focus('.diag-card'); } },
-    { n: 12, stage: '解读', title: '提取字段置信度为中', how: '先进技术产品目录原文写“11月23日前”，没写具体时刻，截止时间标“以原文为准”。', run: async () => { await mk(JINJIAN, FULL); await openPolicy('bj-advanced-tech-catalog-2026'); await focus('#match-drawer .interpret-facts'); } },
-    { n: 13, stage: '申报', title: '政策没有申报模板', how: '2026年第二批重点应用场景：公开通知没有附申报模板，选它直接转到办理指引。', run: async () => { await mk(JINJIAN, FULL); await choosePolicy('bj-application-scenarios-2026'); await focus('.guidance-detail, .chat-message-row:last-child'); } },
-    { n: 14, stage: '申报', title: '模板暂未收录', how: '先进技术产品目录：材料要在国家平台的采集系统里填，模板没有收进库表，提示从原文下载后上传。', run: async () => { await mk(JINJIAN, FULL); await choosePolicy('bj-advanced-tech-catalog-2026'); await focus('.template-missing'); } },
-    { n: 15, stage: '申报', title: '严重不符', how: '选匹配度为低的 AI4Chip 项目，放一份要点不全的申报书，预审提示建议暂缓申报。', run: async () => {
+    { n: 1, stage: '信息采集', title: '查不到企业', how: '输入不完整的企业名称「北京久其金建科技公司」，工商信息查不到；全国范围的项目仍可查看，结果页顶部提示核对名称。', run: async () => { await mk('北京久其金建科技公司'); await focus('.company-notfound'); } },
+    { n: 1, sub: '接口失败', stage: '信息采集', title: '企业接口失败或超时', how: '真实接口故障无法复现，用模拟开关。不提示核对名称，提示稍后重试。', sims: ['apiTimeout'], run: async () => { await mk(JINJIAN); await focus('.company-notfound'); } },
+    { n: 2, stage: '信息采集', title: '企业已注销、吊销', how: '北京华宇信码技术有限公司，2026年6月29日完成注销登记（华宇软件公告）。按 G1 主体状态异常，全部政策不参与匹配。', run: async () => { await mk('北京华宇信码技术有限公司'); await focus('.match-nohit'); } },
+    { n: 3, stage: '信息采集', title: '只填企业名称就确认', how: '新规则第一轮只有企业名称必填。久其金建不填其他字段，地区、行业等由企业地图自动带出，其余显示“待补充”。', run: async () => { await mk(JINJIAN, {}, 'confirm'); await focus('.portrait-confirm, [data-action="intake-confirm"]'); } },
+    { n: 4, stage: '信息采集', title: '正在申报的政策少于 3 条', how: '上海久其软件有限公司：上海只有智能电网专项和全国揭榜挂帅 2 条正在申报，员工人数没有公开数据，按关键字段追问一轮。', run: async () => { await mk('上海久其软件有限公司'); await focus('.intake-followup'); } },
+    { n: 5, stage: '匹配', title: '无命中', how: '成都久其软件有限公司选择“其他行业”：全国揭榜挂帅按 G4 行业限定筛掉，成都和四川没有正在申报的地方政策。', run: async () => { await mk('成都久其软件有限公司', { industry: '其他行业' }); await focus('.match-nohit'); } },
+    { n: 6, stage: '匹配', title: '放宽条件后查到政策', how: '成都久其软件有限公司（其他行业）：放宽行业到软件信息后，查到全国揭榜挂帅项目。', run: async () => { await mk('成都久其软件有限公司', { industry: '其他行业' }); await press('[data-action="nohit-pick"][data-key="industry"]'); await sleep(300); await press('[data-action="nohit-confirm"]'); await focus('#match-result-heading'); } },
+    { n: 7, stage: '匹配', title: '放宽后仍无结果', how: '成都久其软件有限公司（其他行业）：只扩大地区到四川省、行业不变，仍然没有，转人工客服。', run: async () => { await mk('成都久其软件有限公司', { industry: '其他行业' }); await press('[data-action="nohit-pick"][data-key="region"]'); await sleep(300); await press('[data-action="nohit-confirm"]'); await sleep(500); await press('[data-action="nohit-service"]'); await focus('.match-nohit'); } },
+    { n: 8, stage: '匹配', title: '必备条件待补充', how: '郑州企业自主研发项目（科技口）要求研发费用总额不低于 50 万元，是必备条件。研发费用没填时不压档，诊断置顶提示“这是必备条件，请先补充”。北京企业按 G2 看不到这项政策，这里直开政策解读核对。', run: async () => { await mk(JINJIAN); await openPolicy('zz-self-rd-2026'); await focus('#match-drawer .interpret-diagnosis'); } },
+    { n: 9, stage: '匹配', title: '严重失信，全部政策标低', how: '没有可公开核验的真实失信记录，用模拟开关。严重失信按“只扣不加”，所有政策档位标低，结果页顶部提示并给信用修复人工咨询入口。', sims: ['dishonest'], run: async () => { await mk(JINJIAN, FULL); await focus('.compliance-notice'); } },
+    { n: 10, stage: '匹配', title: '政策没写金额', how: '郑州企业自主研发项目纳入市级科技计划，原文没有写资助金额，预估补贴显示“以原文为准”。', run: async () => { await mk(JINJIAN); await openPolicy('zz-self-rd-2026'); await focus('#match-drawer .interpret-overview'); } },
+    { n: 11, stage: '诊断', title: '企业有经营异常记录', how: '没有找到可公开核验的真实记录，用模拟开关，记录上写明“模拟”。经营异常不压档，只在结果页顶部提示。', sims: ['risk'], run: async () => { await mk(JINJIAN, FULL); await focus('.compliance-notice'); } },
+    { n: 12, stage: '解读', title: '提取字段置信度为中', how: '黄埔高技能人才补贴的电子材料 12 月 18 日截止、纸质 12 月 25 日截止，取纸质时间并标“以原文为准”。', run: async () => { await mk(JINJIAN); await openPolicy('gz-hp-skilled-2025'); await focus('#match-drawer .interpret-facts'); } },
+    { n: 13, stage: '申报', title: '政策没有申报模板', how: '郑州企业自主研发项目在市科技业务管理系统在线填报，公开通知没有附模板，选它直接转到办理指引。', run: async () => { await mk(JINJIAN); await choosePolicy('zz-self-rd-2026'); await focus('.guidance-detail, .chat-message-row:last-child'); } },
+    { n: 14, stage: '申报', title: '模板暂未收录', how: '黄埔高技能人才补贴：评分表等附件在原文页面，模板没有收进库表，提示从原文下载后上传。', run: async () => { await mk(JINJIAN); await choosePolicy('gz-hp-skilled-2025'); await focus('.template-missing'); } },
+    { n: 15, stage: '申报', title: '严重不符', how: '选揭榜挂帅项目，放一份要点不全的申报书，预审提示建议暂缓申报。', run: async () => {
       const id = await mk(JINJIAN, FULL);
-      await choosePolicy('bj-ai4chip-2026');
-      const task = S().getTask(id), sid = 'bj-ai4chip-2026-apply-book', text = '项目名称：建筑工程数字化平台。本项目由企业研发团队承担。';
+      await choosePolicy('bj-edz-jbgsh-2026');
+      const task = S().getTask(id), sid = 'bj-edz-jbgsh-2026-apply-book', text = '项目名称：建筑工程数字化平台。本项目由企业研发团队承担。';
       const sources = task.sources.some(source => source.id === sid) ? task.sources.map(source => source.id === sid ? { ...source, provided: true, text, fileName: '项目申报书.docx' } : source) : [...task.sources, { id: sid, name: '项目申报书', type: 'project', provided: true, text, fileName: '项目申报书.docx' }];
       S().updateTask(id, { sources });
       location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`;
@@ -103,16 +104,16 @@
       await focus('.precheck');
     } },
     { n: 16, stage: '办理', title: '办理入口置信度低', how: '软件产品增值税即征即退（按纳税期常态办理）：2026年北京电子税务局的入口没有核实到，第一步改为确认办理渠道。', run: async () => { const id = await mk(JINJIAN, FULL); const task = S().getTask(id); S().updateTask(id, { policyId: 'cn-software-vat', interpretPolicyId: 'cn-software-vat', steps: { ...task.steps, match: true, diagnosis: true } }); location.hash = `#task?task=${encodeURIComponent(id)}&work=guidance`; await press('.guidance-step'); await focus('.guidance-detail'); } },
-    { n: 17, stage: '办理', title: '官方系统打不开', how: '重点应用场景储备项目的办理指引（官网申报）：可以复制官方链接，也可以联系人工客服。', run: async () => { await guidanceFor('bj-application-scenarios-2026'); await focus('[data-action="copy-official"], [data-action="guidance-service"], .guidance-detail'); } },
-    { n: 18, stage: '办理', title: '离开本产品', how: '在办理指引里点官方系统、政策原文或申报模板，每次都先弹窗确认。', run: async () => { await guidanceFor('bj-zjw-scenarios-2026'); await focus('.guidance-detail, .guidance-step'); } },
-    { n: 19, stage: '办理', title: '未选政策就进入办理指引', how: '久其金建还没选政策就打开办理指引，给通用流程和“先选政策”入口。', run: async () => { const task = S().createTask({ title: `${JINJIAN} · 政策申报`, request: '查看办理指引。', company: { name: JINJIAN, ...M().apiProfile(JINJIAN) }, intake: { stage: 'ready', answers: { type: '有限责任公司' }, files: [] } }); location.hash = `#task?task=${encodeURIComponent(task.id)}&work=guidance`; await sleep(1200); } },
-    { n: 20, sub: '读不出文字', stage: '申报', title: '文件读不出文字', how: '进入住建场景征集的材料整理，上传一张图片或扫描版 PDF，会如实提示读不出。', run: async () => { const id = await mk(JINJIAN, FULL); await choosePolicy('bj-zjw-scenarios-2026'); location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`; await focus('[data-source-upload]'); } },
-    { n: 20, sub: '上传失败', stage: '申报', title: '文件上传失败', how: '真实上传故障无法复现，用模拟开关。进入材料整理后上传任意文件，提示重试。', sims: ['uploadFail'], run: async () => { const id = await mk(JINJIAN, FULL); await choosePolicy('bj-zjw-scenarios-2026'); location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`; await focus('[data-source-upload]'); } },
-    { n: 21, stage: '解读', title: '白话解读生成失败', how: '模型故障无法复现，用模拟开关。隐藏白话摘要模块，其余要素照常显示。', sims: ['interpretFail'], run: async () => { await mk(JINJIAN, FULL); await openPolicy('bj-zjw-scenarios-2026'); await focus('#match-drawer .interpret-summary'); } },
+    { n: 17, stage: '办理', title: '邮件报送打不开', how: '揭榜挂帅的办理指引（申报书发主管产业部门邮箱）：可以复制邮箱地址，也可以联系人工客服。', run: async () => { await guidanceFor('bj-edz-jbgsh-2026'); await focus('[data-action="copy-official"], [data-action="guidance-service"], .guidance-detail'); } },
+    { n: 18, stage: '办理', title: '离开本产品', how: '在办理指引里点官方系统、政策原文或申报模板，每次都先弹窗确认。', run: async () => { await guidanceFor('zz-self-rd-2026'); await focus('.guidance-detail, .guidance-step'); } },
+    { n: 19, stage: '办理', title: '未选政策就进入办理指引', how: '久其金建还没选政策就打开办理指引，给通用流程和“先选政策”入口。', run: async () => { const task = S().createTask({ title: `${JINJIAN} · 政策申报`, request: '查看办理指引。', company: { name: JINJIAN, ...M().apiProfile(JINJIAN) }, intake: { stage: 'ready', answers: {}, files: [] } }); location.hash = `#task?task=${encodeURIComponent(task.id)}&work=guidance`; await sleep(1200); } },
+    { n: 20, sub: '读不出文字', stage: '申报', title: '文件读不出文字', how: '进入揭榜挂帅项目的材料整理，上传一张图片或扫描版 PDF，会如实提示读不出。', run: async () => { const id = await mk(JINJIAN, FULL); await choosePolicy('bj-edz-jbgsh-2026'); location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`; await focus('[data-source-upload]'); } },
+    { n: 20, sub: '上传失败', stage: '申报', title: '文件上传失败', how: '真实上传故障无法复现，用模拟开关。进入材料整理后上传任意文件，提示重试。', sims: ['uploadFail'], run: async () => { const id = await mk(JINJIAN, FULL); await choosePolicy('bj-edz-jbgsh-2026'); location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`; await focus('[data-source-upload]'); } },
+    { n: 21, stage: '解读', title: '白话解读生成失败', how: '模型故障无法复现，用模拟开关。隐藏白话摘要模块，其余要素照常显示。', sims: ['interpretFail'], run: async () => { await mk(JINJIAN, FULL); await openPolicy('bj-edz-jbgsh-2026'); await focus('#match-drawer .interpret-summary'); } },
     { n: 22, stage: '账号', title: '未登录', how: '用模拟开关。先登录，登录后回到原页面。', sims: ['loggedOut'], run: async () => { location.hash = '#dashboard?work=interpret'; window.PolicyUI.refresh(); } },
     { n: 23, stage: '材料库', title: '没有材料版本', how: '上海久其软件有限公司还没有确认过材料版本，引导去整理申报材料。', run: async () => { location.hash = `#library?company=${encodeURIComponent('上海久其软件有限公司')}`; } },
-    { n: 24, sub: '文本', stage: '内容安全', title: '对话内容未通过审核', how: '内容审核结果无法用真实数据复现，用模拟开关。进入住建场景征集的申报辅助对话，发送任意一句话，消息会被拦截并提示修改后重发。', sims: ['textBlocked'], run: async () => { const id = await mk(JINJIAN, FULL); await choosePolicy('bj-zjw-scenarios-2026'); location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`; await focus('#adviser-message'); } },
-    { n: 24, sub: '文件/图片', stage: '内容安全', title: '上传内容未通过审核', how: '内容审核结果无法用真实数据复现，用模拟开关。进入住建场景征集的材料整理，上传任意文件或图片，显示“未通过审核”，不解析。', sims: ['fileBlocked'], run: async () => { const id = await mk(JINJIAN, FULL); await choosePolicy('bj-zjw-scenarios-2026'); location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`; await focus('[data-source-upload]'); } },
+    { n: 24, sub: '文本', stage: '内容安全', title: '对话内容未通过审核', how: '内容审核结果无法用真实数据复现，用模拟开关。进入揭榜挂帅项目的申报辅助对话，发送任意一句话，消息会被拦截并提示修改后重发。', sims: ['textBlocked'], run: async () => { const id = await mk(JINJIAN, FULL); await choosePolicy('bj-edz-jbgsh-2026'); location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`; await focus('#adviser-message'); } },
+    { n: 24, sub: '文件/图片', stage: '内容安全', title: '上传内容未通过审核', how: '内容审核结果无法用真实数据复现，用模拟开关。进入揭榜挂帅项目的材料整理，上传任意文件或图片，显示“未通过审核”，不解析。', sims: ['fileBlocked'], run: async () => { const id = await mk(JINJIAN, FULL); await choosePolicy('bj-edz-jbgsh-2026'); location.hash = `#task?task=${encodeURIComponent(id)}&work=assembly`; await focus('[data-source-upload]'); } },
   ];
 
   function render() {

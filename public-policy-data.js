@@ -297,6 +297,169 @@
       // 数值门槛来自《高新技术企业认定管理办法》（国科发火〔2016〕32号）第十一条；这里取近一年销售收入 5000 万至 2 亿元这一档。
       metrics: [{ key: 'rd', label: '研发费占比（近一年销售收入 5000 万至 2 亿元的企业）', need: 4, unit: '%', interval: true }],
     },
+    // 2026-11-26 依《新政策原文》补充 3 条仍在申报期的政策（research/2026-11-26-匹配规则落地/新政策原文.md），
+    // 结构对齐现有政策；原文没有的信息不补写，数值门槛只取原文写明的。
+    {
+      id: 'bj-edz-jbgsh-2026', projectId: 'bj-edz-jbgsh', batchId: '2026-third',
+      title: '北京经济技术开发区2026年度第三批“揭榜挂帅”项目榜单',
+      subsidy: { prefix: '单项最高', value: '1000', unit: '万' },
+      // 揭榜单位为国内法人单位，不限北京注册，地区按全国处理（G2）。
+      region: '全国', industries: ['软件信息', '先进制造', '生命健康'], industryLimited: true, supportType: '财政补贴',
+      publishedAt: '2026-11-12', applicationStart: null, applicationEnd: '2026-12-11',
+      deadlineAt: '2026-12-11T17:00:00+08:00', category: '申报通知', agency: '北京经济技术开发区科技和产业促进局',
+      sourceUrl: 'https://kfqgw.beijing.gov.cn/zwgkkfq/2024zcwj/202611/t20261112_4943503.html',
+      summary: '围绕新一代信息技术、生物医药和大健康、机器人和智能制造、智能网联汽车等主导产业发榜，征集国内法人单位揭榜，评审择优后按“里程碑”节点予以资金支持，单个项目原则上不超过1000万元。',
+      conditions: [
+        '揭榜单位应为国内法人单位，具有组织项目实施的相应能力，接受单独申报与联合申报。',
+        '须具备较强的研发实力、良好的科研条件、稳定的科研团队，以及榜单任务要求的其他条件。',
+        '管理制度符合《北京市科技计划项目（课题）管理办法》等有关要求，对申报材料的真实性和完整性负责。',
+        '申报材料应对榜单任务需求全覆盖，研究内容、技术路线及考核指标科学、合理、明确，经费预算真实、合理。',
+      ],
+      materials: ['《北京经济技术开发区“揭榜挂帅”项目申报书》（原文附件2），签字及加盖公章后的彩色扫描版'],
+      applicationTimeNote: '揭榜截止时间为2026年12月11日17:00；评审答辩事宜另行通知。',
+      // 原文申报要求没有可量化的企业数值门槛，条件按“需确认”处理，不设数值条件（demands）。
+      demands: [],
+      application: {
+        checklist: [
+          { id: 'apply-book', label: '“揭榜挂帅”项目申报书', note: '按原文附件2填写，签字加盖公章后彩色扫描', expects: ['榜单任务', '研究内容', '技术路线', '考核指标', '经费预算'] },
+          { id: 'legal-entity', label: '国内法人单位', kind: 'condition', note: '' },
+          { id: 'rd-strength', label: '具备较强研发实力、科研条件和稳定科研团队', kind: 'condition', note: '以及榜单任务要求的其他条件' },
+          { id: 'management-rules', label: '管理制度符合北京市科技计划项目管理办法等要求', kind: 'condition', note: '京科资发〔2023〕43号、京技管发〔2026〕7号等' },
+          { id: 'task-coverage', label: '申报材料对榜单任务需求全覆盖', kind: 'condition', note: '应用示范具备可行性和保障性' },
+        ],
+        templates: [{ label: '“揭榜挂帅”项目申报书（原文附件2）', url: 'https://kfqgw.beijing.gov.cn/zwgkkfq/2024zcwj/202611/t20261112_4943503.html' }],
+        templateNote: '申报书模板在原文附件2下载，按榜单任务填写。',
+        submit: {
+          name: '主管产业部门邮箱报送', url: 'mailto:kcj@bda.gov.cn', email: 'kcj@bda.gov.cn', deadline: '2026年12月11日17:00',
+          steps: ['下载原文附件2申报书，按榜单任务逐项填写。', '申报书签字并加盖单位公章，扫描成彩色扫描件。', '按榜单所属产业领域，在12月11日17:00前发送至主管产业部门邮箱（各领域联系方式见原文）。', '评审答辩事宜等待另行通知。'],
+          contact: '政策咨询：科技和产业促进局产业政策处 010-83508768',
+        },
+      },
+    },
+    {
+      id: 'zz-self-rd-2026', projectId: 'zz-self-rd', batchId: '2026',
+      title: '关于组织申报2026年度企业自主研发项目纳入市级科技计划的通知',
+      region: '郑州市', industries: ['软件信息', '先进制造', '生命健康'], supportType: '其他',
+      publishedAt: '2026-11-12', applicationStart: null, applicationEnd: '2026-12-11',
+      deadlineAt: '2026-12-11T24:00:00+08:00', category: '申报通知', agency: '郑州市科学技术局',
+      sourceUrl: 'https://zzkj.zhengzhou.gov.cn/tzgg/10347064.jhtml',
+      summary: '郑州市企业自筹资金、自主立项、自行实施的研发项目，纳入市级科技计划管理，在市科技业务管理系统线上申报，属地管理部门限项择优推荐。',
+      conditions: [
+        '申报企业具有独立法人资格，有较强的研发实力、良好的科研条件、稳定的研发人员队伍。',
+        '项目具有明确的研发目标、创新内容和预期成果，未获得过国家、省、市级各类科技项目立项，实施期限不超过2年，申报时尚未完成。',
+        '高新领域单个项目研发费用总额不低于100万元，其他领域不低于50万元。',
+        '企业信用状况良好，无逾期未验收的市级科技计划项目，无失信联合惩戒记录，能够按要求完成研发统计填报。',
+      ],
+      materials: [],
+      applicationTimeNote: '项目申请人在线填报、提交截止2026年12月11日24:00；属地管理部门审核推荐截止2026年12月16日24:00，逾期系统自动关闭。',
+      // 数值门槛只取原文写明的：高新领域 ≥100 万、其他领域 ≥50 万，按“其他领域 50 万”判，高新领域在 note 里说明。
+      demands: [
+        { field: 'rdFee', label: '单个项目研发费用总额', op: '≥', need: 50, unit: '万元', required: true, note: '高新技术领域不低于 100 万元，其他领域不低于 50 万元', original: '高新领域单个项目研发费用总额不低于100万元，其他领域单个项目研发费用总额不低于50万元' },
+      ],
+      application: {
+        noTemplate: true,
+        checklist: [
+          { id: 'online-form', label: '线上申报材料', note: '登录郑州市科技业务管理系统，按申报指南在线填报' },
+          { id: 'unit-review', label: '单位管理员审核', kind: 'condition', note: '申报人提交后由单位管理员审核，再推送属地管理部门' },
+          { id: 'not-funded', label: '项目未获得过国家、省、市级科技项目立项', kind: 'condition', note: '' },
+          { id: 'credit-ok', label: '企业信用状况良好', kind: 'condition', note: '无逾期未验收的市级科技计划项目、无失信联合惩戒记录' },
+          { id: 'project-open', label: '项目尚未完成，实施期限不超过2年', kind: 'condition', note: '' },
+        ],
+        templates: [],
+        templateNote: '在郑州市科技业务管理系统在线填报，公开通知没有单独的下载模板。',
+        submit: {
+          name: '郑州市科技业务管理系统', url: 'https://zzkj.zhengzhou.gov.cn/', deadline: '2026年12月11日24:00（属地推荐至12月16日24:00）',
+          steps: ['登录郑州市科学技术局官网，进入郑州市科技业务管理系统；没有账号的先注册。', '单位管理员在“完善信息”里维护单位信息，全单位共享。', '申报人按申报指南在线填报，提交单位管理员审核。', '审核通过后推送属地管理部门，属地按限项名额择优推荐至市科技局。'],
+          contact: '市科技局资源处 67180458；系统技术问题 67183377',
+        },
+      },
+    },
+    // 2026-11-26 正向演示：有 3 条可量化的企业条件，能演示高 / 中 / 低。原文：余姚市科学技术局 2026-11-12。
+    {
+      id: 'yy-rd-tackle-2026-2', projectId: 'yy-rd-tackle', batchId: '2026-second',
+      title: '关于组织申报2026年度余姚市第二批研发攻关项目的通知',
+      subsidy: { prefix: '单项最高', value: '200', unit: '万' },
+      // 原文限“余姚市注册”；企业地图地区只到市（PRD 8.1.3），本期按宁波市判，申报前请确认注册地在余姚。
+      region: '宁波市', industries: ['先进制造', '软件信息', '生命健康'], supportType: '财政补贴',
+      publishedAt: '2026-11-12', applicationStart: '2026-11-13', applicationEnd: '2026-12-20',
+      applicationStartAt: '2026-11-13T08:30:00+08:00', deadlineAt: '2026-12-20T17:00:00+08:00', category: '申报通知', agency: '余姚市科学技术局',
+      sourceUrl: 'http://www.yy.gov.cn/col/col1229136657/art/2026/art_de600695874547c59b4e5c382d267afe.html',
+      summary: '围绕智能物联、新能源汽车及零部件、集成电路、机器人及智能装备、生命健康与医疗器械、新材料等领域，对余姚市国家高新技术企业的关键技术攻关项目，按研发总预算分档给予不超过 20%、最高 200 万元补助，分立项和验收两批拨付。',
+      conditions: [
+        '申报单位须是余姚市注册的具有独立法人资格的国家高新技术企业，具有项目实施的基础条件、人才条件和技术装备，科研、财务和知识产权管理制度健全。',
+        '申报单位上年度研发投入 600 万元及以上，研发投入占营业收入比重达到 4% 及以上，拥有省级以上企业研发机构。',
+        '项目负责人在相关技术领域具有一定学术地位或技术优势；排名前三的项目组成员同时承担在研本级项目不超过 2 项。',
+        '项目实施周期不超过三年。',
+        '已列入科技诚信失信名单、多头申报、同时承担本级在研项目 2 项及以上、存在超期未验收或近三年验收不通过项目的，不得申报。',
+      ],
+      materials: ['在“余姚科技创新数字导航”在线填报并上传附件；受理后下载打印纸质材料，经属地乡镇街道或园区审核盖章后邮寄市科技局'],
+      applicationTimeNote: '申报系统开放时间 2026年11月13日8:30 至 2026年12月20日17:00。',
+      demands: [
+        { field: 'qualification', label: '国家高新技术企业', op: 'has', need: '高新技术企业', unit: '', required: true, original: '项目申报单位须是余姚市注册的具有独立法人资格的国家高新技术企业' },
+        { field: 'rdFee', label: '上年度研发投入', op: '≥', need: 600, unit: '万元', required: true, original: '项目申报单位上年度研发投入600万元及以上' },
+        { field: 'rdRatio', label: '研发投入占营业收入比重', op: '≥', need: 4, unit: '%', required: true, original: '研发投入占营业收入比重达到4%及以上' },
+      ],
+      application: {
+        noTemplate: true,
+        checklist: [
+          { id: 'online-form', label: '线上申报材料', note: '登录“余姚科技创新数字导航”，法人登录后在“科技创新项目”在线填报并上传附件' },
+          { id: 'paper', label: '纸质申报材料', uploadOnly: true, note: '受理后下载打印、装订成册，经属地审核盖章后邮寄市科技局' },
+          { id: 'yuyao-reg', label: '在余姚市注册', kind: 'condition', note: '本期地区只判断到宁波市，申报前核对注册地' },
+          { id: 'rd-center', label: '拥有省级以上企业研发机构', kind: 'condition', note: '' },
+          { id: 'leader', label: '项目负责人具有一定学术地位或技术优势', kind: 'condition', note: '排名前三的成员同时承担在研本级项目不超过 2 项' },
+          { id: 'period', label: '项目实施周期不超过三年', kind: 'condition', note: '' },
+        ],
+        templates: [],
+        templateNote: '在申报系统在线填报，公开通知没有单独的下载模板。',
+        submit: {
+          name: '余姚科技创新数字导航', url: 'https://stbrain.kjj.ningbo.gov.cn/yy/Public/Index.html', deadline: '2026年12月20日17:00',
+          steps: ['登录“余姚科技创新数字导航”，点右上角“法人登录”（首次使用先注册并实名认证）。', '在“科技创新项目”里在线填报，按要求上传附件。', '市科技局在线审核通过后给受理编号；下载打印纸质材料，装订成册。', '经所在乡镇街道、经济开发区、工业园区管委会或中意生态园审核盖章，一式一份邮寄至余姚市谭家岭东路2号南雷大厦22楼。'],
+          contact: '余姚市科技局高新科 0574-89553541、0574-89553539',
+        },
+      },
+    },
+    {
+      id: 'gz-hp-skilled-2025', projectId: 'gz-hp-skilled', batchId: '2025',
+      title: '关于开展2025年度广州开发区广州市黄埔区优秀高技能人才补贴遴选活动的通知',
+      subsidy: { prefix: '', value: '6000', unit: '元/人' },
+      // 电子材料 12-18 17 时、纸质材料 12-25 17 时两个时间，截止按纸质材料时间并标“以原文为准”。
+      confidence: { applicationEnd: 'mid' },
+      region: '广州市黄埔区', industries: [], supportType: '财政补贴',
+      publishedAt: '2026-11-11', applicationStart: '2026-11-12', applicationEnd: '2026-12-25',
+      deadlineAt: '2026-12-25T17:00:00+08:00', category: '申报通知', agency: '广州市黄埔区人力资源和社会保障局',
+      sourceUrl: 'http://www.hp.gov.cn/gzhprs/gkmlpt/content/11/11098/post_11098219.html',
+      summary: '面向广州开发区、黄埔区企业的高技能人才积分遴选，按 6000 元/人（税前）给予补贴，同一企业最多推荐 200 名，全区遴选不超过 1000 名。',
+      conditions: [
+        '所在单位为广州开发区、黄埔区及其受托管理和下辖园区范围内依法诚信经营、独立核算的企业。',
+        '参评人员在本区同一企业一线生产或技术管理岗位连续工作1年以上，且在该企业缴纳社会保险费满1年以上。',
+        '已获得高级技工以上国家职业资格证书或职业技能等级证书。',
+        '参评人员按评分表自评，基础指标分数须达到40分以上（含40分）。',
+        '在本区成立不满一年的企业、已入选“技能工匠（黄埔工匠）”的人员不符合申请条件。',
+      ],
+      materials: ['按《参评单位报送材料目录清单》《参评个人报送材料目录清单》（原文附件1、2）准备电子材料和纸质材料，单位统一提交'],
+      applicationTimeNote: '电子材料自通知发布之日起至2026年12月18日17时在黄埔“数字人社”平台提交；纸质材料至2026年12月25日17时，逾期不再受理。',
+      demands: [
+        { field: 'founded', label: '在本区成立年限', op: '≥', need: 1, unit: '年', note: '在本区成立不满一年的企业不符合申请条件', original: '不具有独立法人资格的分公司、办事处等分支机构，或在我区成立不满一年的企业，不符合申请条件。' },
+      ],
+      application: {
+        templateStatus: 'missing',
+        templateWhere: '评分表、承诺书、申请表等附件在原文页面下载',
+        checklist: [
+          { id: 'online-materials', label: '电子申报材料', note: '在黄埔“数字人社”综合服务平台提交' },
+          { id: 'paper-materials', label: '纸质申报材料', uploadOnly: true, note: '电子材料初审通过后 A4 打印装订成册，单位统一提交' },
+          { id: 'staff-1y', label: '参评人员连续工作且缴纳社保满1年', kind: 'condition', note: '2025年11月12日（含）前入职，以养老保险险种为准，无补缴代缴' },
+          { id: 'cert', label: '高级技工以上国家职业资格证书或职业技能等级证书', kind: 'condition', note: '' },
+          { id: 'self-40', label: '自评基础指标分数达到40分以上', kind: 'condition', note: '按评分表（原文附件2-1）自评' },
+        ],
+        templates: [],
+        templateNote: '评分表等附件在原文页面下载，模板暂未收录。',
+        submit: {
+          name: '黄埔“数字人社”综合服务平台', url: 'https://hprczs.hp.gov.cn/index.html#/Home', deadline: '电子材料至2026年12月18日17时，纸质材料至12月25日17时',
+          steps: ['单位组织符合条件的人才按评分表自评，确定推荐名单并公示5天。', '填写《参评人员信息汇总表》，在黄埔“数字人社”平台提交电子材料。', '电子材料初审通过后，纸质材料按目录清单装订成册，以单位为主体提交。', '受理地址：广州市黄埔区科学城总部经济区A5栋17楼。'],
+          contact: '受理电话（020）66819139',
+        },
+      },
+    },
     {
       id: 'cn-software-vat', projectId: 'cn-software-vat', batchId: '2026',
       title: '软件产品增值税即征即退',

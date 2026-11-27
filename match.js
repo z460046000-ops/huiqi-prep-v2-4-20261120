@@ -2,17 +2,22 @@
 (() => {
   'use strict';
 
+  /* 企业输入（规则手册第 2 节）：12 个字段里只有企业名称必填；所属行业、员工人数由企业地图自动带出；
+     其余 9 项第一轮不问，匹配到政策后按政策用得上哪项再追问。 */
   const questions = [
-    { key: 'type', label: '企业类型', options: ['有限责任公司', '股份有限公司', '国有企业', '外商投资企业', '合伙企业', '个人独资企业', '个体工商户', '其他'] },
-    { key: 'stage', label: '成长阶段', options: ['初创期（创业）', '成长期（成长）', '成熟期（做大做强）'] },
-    { key: 'revenue', label: '营业收入', options: ['500万以下', '500-2000万', '2000-5000万', '5000万-1亿', '1-2亿', '2-5亿', '5-10亿', '10亿以上'] },
-    { key: 'rd', label: '研发费占比', options: ['2%以下', '2%-3%', '3%-4%', '4%-5%', '5%-10%', '10%-15%', '15%以上'] },
-    { key: 'talent', label: '近3年有无引进人才', options: ['无', '有'] },
+    { key: 'revenue', label: '上年度营业收入', options: ['500万以下', '500-2000万', '2000-5000万', '5000万-1亿', '1-2亿', '2-5亿', '5-10亿', '10亿以上'], interval: true },
+    { key: 'growth', label: '上年度营收增长率', options: ['下降', '0-5%', '5-10%', '10-15%', '15%以上'], interval: true },
+    { key: 'rdFee', label: '上年度研发费用总额', type: 'number', unit: '万元' },
+    { key: 'profit', label: '上年度利润总额', type: 'number', unit: '万元' },
+    { key: 'netProfit', label: '上年度净利润', type: 'number', unit: '万元' },
+    { key: 'tax', label: '上年度纳税总额', type: 'number', unit: '万元' },
+    { key: 'rdShare', label: '当前研发人数占比', options: ['5%以下', '5-10%', '10-15%', '15%以上'], interval: true },
+    { key: 'assets', label: '上年度资产总额', type: 'number', unit: '万元' },
+    { key: 'debtRatio', label: '上年度资产负债率', options: ['50%以下', '50-70%', '70%以上'], interval: true },
   ];
   const groups = [
-    { title: '基本信息', keys: ['type'] },
-    { title: '经营情况', keys: ['stage', 'revenue'] },
-    { title: '研发与人才', keys: ['rd', 'talent'] },
+    { title: '企业画像（企业地图带出）', keys: [] },
+    { title: '按政策补充申报条件', keys: ['revenue', 'rdFee'] },
   ];
   const stageDelay = 1000;
   const state = { taskId: '', phase: 'result', stage: 0, timer: 0, drawerReturn: null };
@@ -32,7 +37,7 @@
   const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const hintText = answers => {
     const left = questions.length - answeredCount(answers);
-    return left ? `再选 ${left} 项，匹配更准` : '都选好了';
+    return left ? `其余 ${left} 项匹配到政策后按需追问` : '都填好了';
   };
 
   const publicPolicies = () => window.PolicyPublicPolicies || [];
@@ -57,51 +62,100 @@
     const status = statusOf(policy);
     if (status === 'notice') return ongoing(policy) ? '按纳税期常态办理' : '暂无统一申报窗口';
     if (status === 'closed') return `已于${shortDate(policy.applicationEnd)}截止`;
-    if (policy.applicationStart > today()) return `${shortDate(policy.applicationStart)}开始申报`;
+    if (policy.applicationStart > today()) return `即将开始，${shortDate(policy.applicationStart)}起申报`;
     const left = daysLeft(policy);
     return `${shortDate(policy.applicationEnd)}截止${left <= 7 ? `，${left ? `还剩 ${left} 天` : '今天截止'}` : ''}`;
   }
 
-  /* 匹配依据只来自用户所选内容，不声称企业已满足政策条件。 */
-  function matchPolicies(answers) {
-    const { region, industry, stage, revenue, rd, talent } = answers;
-    const rdLow = rd === '2%以下' || rd === '2%-3%';
-    // 准入只有地区（PRD V2.2 8.1.4）：企业所在省、市或全国；地区待补充时只取全国政策。行业不筛选，作为计分条件。
-    const hasRegion = Boolean(region) && region !== '其他地区';
-    // 放宽到省时 region 是省名：再带上同省其他城市的政策，结果卡上提示申报前核对地区要求（PRD 6.3 第 6 条）。
-    const inRegion = policy => policy.region === '全国' || (hasRegion && (policy.region === region || policy.region === regionParent[region] || regionParent[policy.region] === region));
-    const reasonsFor = policy => {
-      const rules = [
-        region && policy.region === region && [3, `面向${region}，和你选的地区一致`],
-        region && policy.region === '全国' && [1, '全国范围的政策'],
-        industry && policy.industries.includes(industry) && [2, `${industry}在这项政策涉及的行业内`],
-      ];
-      if (policy.supportType === '财政补贴') rules.push(
-        rd && !rdLow && [2, `研发费占比 ${rd}，和政策的研发要求相符`],
-        rd && rdLow && [0, `研发费占比 ${rd}，研发投入要重点核对`],
-        talent === '有' && [1, '近3年引进过人才，可作为研发能力的佐证'],
-      );
-      if (policy.supportType === '资质荣誉') rules.push(
-        stage && !stage.startsWith('成熟') && [1, `处于${stage.slice(0, 3)}，可以核对培育条件`],
-        rd && !rdLow && [1, `研发费占比 ${rd}，可作为资质材料的基础`],
-      );
-      if (policy.supportType === '其他') rules.push(
-        revenue && revenue !== '500万以下' && [1, `营业收入 ${revenue}，有条件开展数字化项目`],
-      );
-      if (policy.supportType === '融资支持') rules.push(
-        stage && [1, `处于${stage.slice(0, 3)}，可以了解对应的金融服务`],
-      );
-      return rules.filter(Boolean);
-    };
-    const order = { open: 0, notice: 1, closed: 2 };
-    return publicPolicies()
-      .filter(policy => inRegion(policy))
-      .map((policy, index) => {
-        const matched = reasonsFor(policy);
-        return { policy, index, status: statusOf(policy), score: matched.reduce((sum, [points]) => sum + points, 0), reasons: matched.map(([, reason]) => reason) };
-      })
-      .sort((a, b) => order[a.status] - order[b.status] || b.score - a.score || a.index - b.index);
+  /* ---------- 匹配规则（《政策匹配流程与规则手册（分三口）》2026-11-26）---------- */
+  /* 4.3 政策归口：按发文机构判断，联合发文按第一发文单位；归不到三个口的用通用分值。 */
+  const BUREAU_KEYS = [
+    ['工信', ['工业和信息化', '经济和信息化', '工信', '经信']],
+    ['科技', ['科学技术', '科委', '科技']],
+    ['人社', ['人力资源和社会保障', '人社']],
+  ];
+  function bureauOf(policy) {
+    const first = String(policy?.agency || '').split(/[、，,]/)[0];
+    for (const [bureau, keys] of BUREAU_KEYS) if (keys.some(key => first.includes(key))) return bureau;
+    return '通用';
   }
+  /* 4.2 分值表（手册 T26）：条件分值按政策所属的口取，键是判定用的字段。 */
+  const WEIGHTS = {
+    revenue:       { 工信: 3, 科技: 3, 人社: 3, 通用: 3 },
+    rdFee:         { 工信: 3, 科技: 3, 人社: 2, 通用: 3 },
+    rdShare:       { 工信: 3, 科技: 3, 人社: 2, 通用: 3 },
+    rdRatio:       { 工信: 3, 科技: 3, 人社: 2, 通用: 3 },
+    staff:         { 工信: 2, 科技: 2, 人社: 2, 通用: 2 },
+    growth:        { 工信: 2, 科技: 2, 人社: 2, 通用: 2 },
+    profit:        { 工信: 3, 科技: 3, 人社: 2, 通用: 3 },
+    netProfit:     { 工信: 2, 科技: 2, 人社: 2, 通用: 2 },
+    tax:           { 工信: 2, 科技: 2, 人社: 2, 通用: 2 },
+    assets:        { 工信: 2, 科技: 2, 人社: 2, 通用: 2 },
+    debtRatio:     { 工信: 2, 科技: 2, 人社: 2, 通用: 2 },
+    ip:            { 工信: 3, 科技: 3, 人社: 2, 通用: 3 },
+    qualification: { 工信: 3, 科技: 3, 人社: 2, 通用: 3 },
+    scale:         { 工信: 3, 科技: 3, 人社: 3, 通用: 3 },
+    founded:       { 工信: 2, 科技: 2, 人社: 3, 通用: 2 },
+    social:        { 工信: 2, 科技: 2, 人社: 3, 通用: 2 },
+  };
+  const weightOf = (field, bureau) => WEIGHTS[field]?.[bureau] || 0;
+  /* 4.6 必备条件（8 项，主体状态、主体类型、所属行业在第①步筛选检查，合规记录只扣不加）。 */
+  const REQUIRED_FIELDS = new Set(['revenue', 'rdFee', 'rdRatio', 'profit', 'tax', 'rdShare', 'ip', 'qualification', 'scale']);
+
+  /* 4.1 一条条件怎么判：未达到 / 达到 / 超过（≥ 要求 2 倍；"≤"类 ≤ 要求 50%），另有待补充、需确认。 */
+  function judgeDemand(facts, demand) {
+    const need = Number(demand.need);
+    const upper = demand.op === '≤';
+    const fact = factOf(facts, demand.legacy ? demand.key : demand.field, demand.field);
+    if (fact.state === 'noField') return { status: 'tbc', have: null };
+    if (fact.state === 'empty') return { status: 'unknown', have: null, display: '待补充' };
+    if (fact.state === 'list') return { status: fact.list.includes(demand.need) ? 'ready' : 'missing', have: fact.list.includes(demand.need) ? 1 : 0, display: fact.display };
+    if (fact.state === 'range') {
+      const [low, high] = fact.range;
+      const said = facts[rangeKey(demand.field, need)];
+      if (upper ? low <= need * 0.5 : low >= need * 2) return { status: 'ready', have: low, exceed: true, display: fact.display };
+      if (upper ? high <= need : low >= need) return { status: 'ready', have: upper ? high : low, display: fact.display };
+      if (upper ? low > need : high < need) return { status: 'missing', have: upper ? low : high, display: fact.display };
+      if (said === 'yes') return { status: 'ready', have: need, display: `${fact.display}（已确认达到）` };
+      if (said === 'no') return { status: 'missing', have: low, display: `${fact.display}（已确认没达到）` };
+      return { status: 'unknown', have: null, display: `${fact.display}（待确认）`, straddle: true, pick: fact.display, unsure: said === 'unsure' };
+    }
+    const value = fact.value;
+    if (upper ? value <= need * 0.5 : value >= need * 2) return { status: 'ready', have: value, exceed: true, display: fact.display };
+    return { status: (upper ? value <= need : value >= need) ? 'ready' : 'missing', have: value, display: fact.display };
+  }
+
+  /* 第①步筛选（手册 T15）：G1 主体状态、G2 地区、G3 主体类型、G4 行业限定；未知信息不拦，只在明确不符时拦。
+     用户选“其他行业”表示不属于已列行业：行业限定政策按 G4 拦。 */
+  const BAD_ENTITY_STATUS = ['吊销', '注销', '停业', '清算', '撤销', '责令关闭'];
+  function gateOf(policy, facts) {
+    const fails = [];
+    const region = facts.region && facts.region !== '其他地区' ? facts.region : '';
+    if (BAD_ENTITY_STATUS.some(word => String(facts.entityStatus || '').includes(word))) fails.push({ code: 'G1', reason: '主体状态异常，无法进行政策匹配' });
+    const inArea = policy.region === '全国' || (region && (policy.region === region || policy.region === regionParent[region] || regionParent[policy.region] === region));
+    if (!inArea) fails.push({ code: 'G2', reason: `政策面向${policy.region}，企业注册地不在适用区域` });
+    if (Array.isArray(policy.entityTypes) && policy.entityTypes.length && facts.type && !policy.entityTypes.includes(facts.type)) fails.push({ code: 'G3', reason: '主体类型不符' });
+    if (policy.industryLimited && facts.industry && !policy.industries.includes(facts.industry)) fails.push({ code: 'G4', reason: `政策仅限${policy.industries.join('、')}` });
+    return { pass: !fails.length, fails };
+  }
+
+  /* 三步流程（手册第 1 节）：①筛选 → ②算达标度 → ③定档。
+     已截止的政策不参与匹配；第①步未通过的不展示给用户，只在控制台记录。 */
+  function matchPolicies(facts, task = null) {
+    const blocked = [];
+    const items = publicPolicies()
+      .filter(policy => statusOf(policy) !== 'closed')
+      .map((policy, index) => {
+        const gate = gateOf(policy, facts);
+        if (!gate.pass) { blocked.push({ id: policy.id, fails: gate.fails }); return null; }
+        return { policy, index, status: statusOf(policy) };
+      })
+      .filter(Boolean);
+    if (blocked.length) console.info('[政策匹配] 第①步筛选未通过、不展示的政策：', blocked);
+    return items;
+  }
+
+  /* 匹配依据只来自用户所选内容和企业地图带出的信息，不声称企业已满足政策条件。 */
 
   /* ---------- 画像出来前的理解过程：只整理用户已给的信息，没有外部查询 ---------- */
   const understand = { taskId: '', stage: 0, timer: 0 };
@@ -158,8 +212,11 @@
     return `<div class="chat-message-row is-user"><span class="chat-message-avatar chat-message-user-avatar" aria-hidden="true">企</span><div class="chat-message-body"><span class="chat-message-name">企业负责人</span><p class="chat-message chat-user">${esc(text)}</p></div></div>`;
   }
 
-  function questionFields(answers, revealed = revealedCount(answers)) {
-    return questions.map((question, index) => `<fieldset class="intake-question${index === revealed - 1 && index ? ' is-new' : ''}" data-question="${index}"${index < revealed ? '' : ' hidden'}><legend>${esc(question.label)}</legend><div class="match-options">${question.options.map(option => `<label class="match-option"><input type="radio" name="${question.key}" value="${esc(option)}"${answers[question.key] === option ? ' checked' : ''}><span>${esc(option)}</span></label>`).join('')}</div></fieldset>`).join('');
+  const questionControl = (question, answers) => question.type === 'number'
+    ? `<div class="match-options match-options-number"><label class="match-option is-input"><input type="number" name="${question.key}" min="0" max="10000000" step="0.1" placeholder="没填可留空" value="${esc(answers[question.key] ?? '')}" aria-label="${esc(question.label)}（${esc(question.unit || '')}）"><span>${esc(question.unit || '')}</span></label></div>`
+    : `<div class="match-options">${question.options.map(option => `<label class="match-option"><input type="radio" name="${question.key}" value="${esc(option)}"${answers[question.key] === option ? ' checked' : ''}><span>${esc(option)}</span></label>`).join('')}</div>`;
+  function questionFields(answers, revealed = questions.length) {
+    return questions.map((question, index) => `<fieldset class="intake-question${index === revealed - 1 && index ? ' is-new' : ''}" data-question="${index}"${index < revealed ? '' : ' hidden'}><legend>${esc(question.label)}${question.type === 'number' ? `（${esc(question.unit || '')}）` : ''}</legend>${questionControl(question, answers)}</fieldset>`).join('');
   }
 
   /* 所属行业只在对话的字段卡里问；选项来自已收录政策。 */
@@ -178,19 +235,23 @@
     return form;
   }
 
-  /* 点“确定”后先核对企业画像，确认了才匹配；点“跳过”直接按已有信息匹配。 */
+  /* 点“确定”后先核对企业画像，确认了才匹配；点“跳过”直接按已有信息匹配。
+     确认卡只列自动带出的和已填的字段（手册 P8：第一轮展示 6–8 个），没填的按政策追问。 */
   function confirmCard(task, stage) {
     const id = esc(task.id);
     if (stage === 'blocked') return assistantBubble(`「${task.company.name}」的工商状态为${esc(companyRevoked(task))}，不能进入匹配。`, `<div class="intake-card company-blocked" role="status"><p><strong>企业状态异常</strong>工商登记状态为“${esc(companyRevoked(task))}”。请核对企业名称是否填错，或换一家正常经营的企业。</p><div class="intake-foot is-end"><button type="button" class="button button-secondary" data-action="intake-edit" data-task="${id}">修改企业名称</button></div></div>`);
-    const rows = portraitRows(task);
-    const known = rows.filter(([, value]) => value).length;
+    const followLabels = new Set(questions.map(question => question.label));
+    const all = portraitRows(task);
+    const rows = all.filter(([label, value]) => value || !followLabels.has(label));
+    const known = all.filter(([, value]) => value).length;  // 与右侧画像卡同一口径：分母是全部画像字段
     const notFound = companyNotFound(task) ? '<p class="confirm-note">没有查到工商信息，以下只有您填写的内容。</p>' : '';
     const regionPick = factsOf(task).region ? '' : `<div class="confirm-region">${regionField(answersOf(task))}<small>选所在地区，能看到地方政策；可以不选，不选只看全国政策。</small></div>`;
-    return assistantBubble('请核对企业画像，确认后开始匹配。', `<div class="intake-card portrait-confirm"><header><strong>企业画像</strong><span>已了解 ${known}/${rows.length}</span></header>${notFound}<dl>${rows.map(([label, value]) => `<div><dt>${esc(label)}</dt><dd${value ? '' : ' class="is-empty"'}>${esc(value || '待补充')}</dd></div>`).join('')}</dl>${regionPick}<div class="intake-foot is-end"><button type="button" class="text-button" data-action="intake-edit" data-task="${id}">修改</button><button type="button" class="button button-primary" data-action="intake-confirm" data-task="${id}">确认企业信息，开始匹配 ${icon('arrow')}</button></div></div>`);
+    return assistantBubble('请核对企业画像，确认后开始匹配。', `<div class="intake-card portrait-confirm"><header><strong>企业画像</strong><span>已了解 ${known}/${all.length}</span></header>${notFound}<dl>${rows.map(([label, value]) => `<div><dt>${esc(label)}</dt><dd${value ? '' : ' class="is-empty"'}>${esc(value || '待补充')}</dd></div>`).join('')}</dl><p class="confirm-note">营业收入、研发费用等其余 ${questions.length} 项不在这里问，匹配到政策后按需要追问。</p>${regionPick}<div class="intake-foot is-end"><button type="button" class="text-button" data-action="intake-edit" data-task="${id}">修改</button><button type="button" class="button button-primary" data-action="intake-confirm" data-task="${id}">确认企业信息，开始匹配 ${icon('arrow')}</button></div></div>`);
   }
   function fieldsCard(task) {
-    const answers = answersOf(task), fields = questionFields(answers);
-    return `<div class="intake-card intake-form" data-task="${esc(task.id)}"><div class="intake-name-row"><label for="intake-name">企业名称</label><input id="intake-name" type="text" maxlength="300" autocomplete="organization" data-task="${esc(task.id)}" value="${esc(task.company.name)}"></div>${fields}<div class="intake-foot"><p class="match-hint" aria-live="polite">${esc(hintText(answers))}</p><div class="intake-foot-actions"><button type="button" class="button button-primary" data-action="intake-start" data-task="${esc(task.id)}">确定 ${icon('arrow')}</button></div></div></div>`;
+    const answers = answersOf(task);
+    // 第一轮只需要企业名称（手册第 2 节）：地区、行业、员工人数由企业地图带出，其余按政策追问。
+    return `<div class="intake-card intake-form" data-task="${esc(task.id)}"><div class="intake-name-row"><label for="intake-name">企业名称</label><input id="intake-name" type="text" maxlength="300" autocomplete="organization" data-task="${esc(task.id)}" value="${esc(task.company.name)}"></div><p class="match-hint">企业名称必填，其余信息匹配到政策后按需追问；填错名称可以在这里改。</p><div class="intake-foot"><p class="match-hint" aria-live="polite">${esc(hintText(answers))}</p><div class="intake-foot-actions"><button type="button" class="button button-primary" data-action="intake-start" data-task="${esc(task.id)}">确定 ${icon('arrow')}</button></div></div></div>`;
   }
 
   /* 输入框里的上传入口和已选文件，资料助理对话的任何阶段都能用。 */
@@ -201,14 +262,14 @@
   }
 
   function answersSummary(answers) {
-    return questions.filter(question => answers[question.key]).map(question => answers[question.key]).join(' · ') || '先不填，直接往下';
+    return questions.filter(question => answers[question.key]).map(question => answers[question.key]).join(' · ') || '先不填，直接开始匹配';
   }
 
   function intakeMarkup(task) {
     if (!task?.intake) return '';
     if (understanding(task.id)) return assistantBubble(`收到，我先理解一下「${task.company.name}」的情况。`, `<div class="intake-card match-running"><div class="match-running-body"><div class="match-orb" aria-hidden="true"><span class="match-orb-ring"></span><span class="match-orb-ring"></span><span class="match-orb-core">正在理解</span></div>${understandStages(task)}</div></div>`);
     const answers = answersOf(task), { stage } = task.intake;
-    const greeting = `想帮「${task.company.name}」匹配政策，先了解几项情况，点选就行。`;
+    const greeting = `想帮「${task.company.name}」匹配政策，只需企业名称就能开始，其余信息匹配到政策后按需追问。`;
     if (stage === 'fields') return assistantBubble(greeting, fieldsCard(task));
     if (stage === 'confirm' || stage === 'blocked') return `${assistantBubble(greeting)}${userBubble(answersSummary(answers))}${confirmCard(task, stage)}`;
     const edit = `<button type="button" class="text-button intake-edit" data-action="intake-edit" data-task="${esc(task.id)}">修改</button>`;
@@ -467,9 +528,25 @@
   });
 
   /* ---------- 政策解读：在对话里选政策、看解读 ---------- */
+  /* 企业事实 = 用户所填 + 企业地图自动带出（地区、主体状态、主体类型、行业、成立年限、员工人数、合规记录、知识产权）。
+     用户明确选“其他地区 / 其他行业”时保留字面值：行业限定政策按“不属于支持行业”处理。 */
   const factsOf = task => {
     const answers = answersOf(task);
-    return { ...answers, region: answers.region || task.company.region, industry: answers.industry || task.company.industry };
+    const name = (task?.company?.name || '').trim();
+    const auto = apiProfile(name);
+    const founded = !companyNotFound(task) ? REAL_COMPANIES[name]?.founded || '' : '';
+    const foundedYears = founded ? Math.max(0, Math.floor((Date.parse(today()) - Date.parse(founded)) / 31557600000)) : null;
+    const data = task ? mockCompanyData(task) : null;
+    const ip = data && (data.patents !== null || data.copyrights !== null) ? (data.patents || 0) + (data.copyrights || 0) : null;
+    return {
+      name, ...auto,
+      // 注销、吊销企业按 G1 主体状态异常处理，全部政策不参与匹配。
+      entityStatus: REVOKED_NAMES[name] || auto.entityStatus,
+      foundedYears, ip, compliance: complianceOf(task),
+      ...answers,
+      region: answers.region || auto.region,
+      industry: answers.industry || auto.industry,
+    };
   };
 
   /* 按画像排序；画像对不上任何政策时列出全部，解读不要求企业符合条件。 */
@@ -483,52 +560,73 @@
   // 选的是内置项目自带的政策时，沿用原来的对话内容。
   const interpretActive = task => !interpretId(task) || Boolean(interpretingPublic(task));
 
-  /* 匹配度（PRD V2.2 8.1.4，2026-11-10 和业务对齐）：准入条件（地区、行业）只过滤，未知不过滤、标待确认；
-     其余每项条件权重相同，满足一项得一项，内部分值 = 满足数 ÷ 总数 × 100（未知算不满足、计入总数）；
-     只向用户展示高 / 中 / 低：80 及以上为高，20 以下为低，其余为中；全部未知显示“待确认”。材料只算准备度，不计分。 */
-  const HIGH_LINE = 80, LOW_LINE = 20;
-  const FIRST_PICK_MIN = HIGH_LINE;  // 首选推荐：第一条正在申报且匹配度为高
-  const GAP_LINE = LOW_LINE;         // 匹配度为低时提示“条件差距较大”
-  // V2.2 最终口径：4 档 高 / 中 / 暂无法判断 / 低；一项都判断不了时为“暂无法判断”。
-  const gradeOf = score => score === null ? '暂无法判断' : score >= HIGH_LINE ? '高' : score < LOW_LINE ? '低' : '中';
-  const GRADE_ORDER = { 高: 0, 中: 1, 暂无法判断: 2, 低: 3 };
-  const GRADE_TIPS = { 高: '大部分条件已经满足', 中: '部分条件满足，补充或补齐后可能更高', 低: '条件差距较大，建议先补齐再申报', 暂无法判断: '现有信息判断不了，补充企业信息后可以判断' };
-  const STATE_TIPS = { 符合: '企业信息达到这项要求', 可能不符: '按现有信息还没达到，信息有误可以修改', 待补充: '缺企业信息，补充后就能判断', 待确认: '政策原文对这项要求写得不够明确，以原文为准' };
+  /* 达标度与定档（手册 4.4、4.5、第 5 节）：单条得分 = 分值 w × 系数（达到 / 超过 = 1，未达到 / 待补充 = 0，需确认不计）；
+     达标度 C = 得分之和 ÷ 能判断条件的分值之和 × 100。档位：高 80–100、中 60–79、低 <60 或必备未达到、待确定（可判断条件少于 2 条）。 */
+  const HIGH_LINE = 80, LOW_LINE = 60;
+  const GAP_LINE = LOW_LINE;         // 达标度为低时提示“条件差距较大”
+  const gradeOf = score => score === null ? '待确定' : score >= HIGH_LINE ? '高' : score < LOW_LINE ? '低' : '中';
+  const GRADE_ORDER = { 高: 0, 中: 1, 低: 2, 待确定: 3 };
+  const GRADE_TIPS = { 高: '条件基本符合，可以直接准备申报', 中: '部分条件未达到，差距项已标出', 低: '条件差距较大，或有必备条件未达到，建议先人工咨询', 待确定: '能判断的条件少于 2 条，补齐信息或人工确认后定档' };
+  const STATE_TIPS = { 符合: '企业信息达到这项要求', 优势: '达到要求的 2 倍以上，只用于展示，不影响分数', 可能不符: '按现有信息还没达到，信息有误可以修改', 待补充: '缺企业信息，补充后就能判断', 需确认: '没有对应字段或政策写得不清，以原文为准', 待确认: '没有对应字段或政策写得不清，以原文为准' };
   const helpTip = text => `<span class="help-tip" tabindex="0" role="img" aria-label="${esc(text)}" data-tip="${esc(text)}">?</span>`;
-  const isScored = row => row.kind === '计分条件' || row.kind === '量化条件';
+  const isScored = row => row.kind === '量化条件';
   function scoreOf(rows) {
-    const gate = rows.filter(row => row.kind === '准入条件'), metrics = rows.filter(isScored);
-    const blocked = gate.some(row => row.status === 'missing');
-    // 待补充（企业信息缺）、待确认（政策置信度低）都按不满足算，仍计入总数；没有计分条件记 60 分。
-    const met = metrics.filter(row => row.status === 'ready').length;
-    const judged = metrics.filter(row => row.status === 'ready' || row.status === 'missing').length;
-    const score = !metrics.length ? 60 : judged ? Math.round(met / metrics.length * 100) : null;
+    const metrics = rows.filter(isScored);
+    const judgeable = metrics.filter(row => row.status === 'ready' || row.status === 'missing' || row.status === 'unknown');
+    const missingRequired = metrics.some(row => row.isRequired && row.status === 'missing');
+    const got = metrics.filter(row => row.status === 'ready').reduce((sum, row) => sum + (row.w || 0), 0);
+    const total = judgeable.reduce((sum, row) => sum + (row.w || 0), 0);
+    const score = judgeable.length >= 2 && total ? Math.round(got / total * 100) : null;
+    const grade = missingRequired ? '低' : gradeOf(score);
     const pending = metrics.filter(row => row.status === 'unknown').length;
-    const grade = gradeOf(score);
-    const level = blocked ? '准入不符' : grade;
-    return { score, shown: score, grade, level, pending, blocked };
+    return { score, shown: score === null ? 0 : score, grade, level: grade, pending, judgeable: judgeable.length, missingRequired };
   }
+  /* 对照表行：准入核对（不计分）+ 数值条件（计分，分值按归口）+ 需确认条件（不计分）+ 材料。 */
   function comparisonRows(task, policy) {
-    const { region, industry } = factsOf(task);
-    const metrics = policyMetrics(task, policy);
+    const facts = factsOf(task);
+    const bureau = bureauOf(policy);
     const items = (policy.application?.checklist || []).filter(item => item.kind !== 'condition' && item.required !== false);
     const ready = items.filter(item => task.sources?.some(source => source.id === `${policy.id}-${item.id}` && source.provided)).length;
-    const row = (key, label, required, current, max, ratio, action) => ({key,label,required,current,max,points:ratio===null?null:Math.round(max*Math.min(1,Math.max(0,ratio))),status:ratio===null?'unknown':ratio>=1?'ready':'missing',action});
-    const rows = [
-      row('region','适用地区',policy.region,region||(policy.region==='全国'?'不限地区':'待补充'),15,policy.region==='全国'?1:!region?null:region===policy.region?1:0,'核对地区'),
-      ...(policy.industries.length?[row('industry','所属行业',policy.industries.join('、'),industry||'待补充',15,!industry?null:policy.industries.includes(industry)?1:0,'核对行业')]:[]),
-      ...metrics.map((item,index)=>({...row(item.key,item.label,`≥ ${item.need}${item.unit==='%'?'':' '}${item.unit}`,item.interval?item.display:item.have===null?'待核实':`${item.have} ${item.unit}`,Math.floor(30/metrics.length)+(index===0?30%metrics.length:0),item.have===null?null:item.have/item.need,'核对数量'),metric:item})),
-      {...row('materials','申报材料',items.length?`${items.length} 项必需材料`:'清单待核实',`${ready} 项已上传`,metrics.length?40:70,items.length?ready/items.length:null,'补充材料'),ready,total:items.length},
-    ];
-    rows.forEach(row => { row.kind = row.key === 'region' ? '准入条件' : row.key === 'industry' ? '计分条件' : row.key === 'materials' ? '材料（不计入匹配度）' : '量化条件'; });
-    // 政策这一项置信度低：记“待确认”，按不满足算（PRD 8.2.2）。
-    rows.forEach(row => { if (row.metric && policy.confidence?.metrics?.[row.key] === 'low') row.status = 'tbc'; });
+    const rows = [];
+    const region = facts.region && facts.region !== '其他地区' ? facts.region : '';
+    const inArea = policy.region === '全国' || (region && (policy.region === region || policy.region === regionParent[region] || regionParent[policy.region] === region));
+    rows.push({ key: 'region', label: '适用地区', kind: '准入条件', required: policy.region, current: region || (policy.region === '全国' ? '不限地区' : '待补充'), status: region ? (inArea ? 'ready' : 'missing') : 'unknown', w: 0, action: '核对地区' });
+    if (policy.industryLimited) {
+      const industry = facts.industry && facts.industry !== '其他行业' ? facts.industry : '';
+      rows.push({ key: 'industry', label: '所属行业', kind: '准入条件', required: policy.industries.join('、'), current: industry || '待补充', status: industry ? (policy.industries.includes(industry) ? 'ready' : 'missing') : 'unknown', w: 0, action: '核对行业' });
+    }
+    policyMetrics(task, policy).forEach((item, index) => {
+      const field = item.field;
+      const w = weightOf(field, bureau);
+      const exists = rows.some(row => row.key === field);
+      const key = exists || !field ? `${field || 'cond'}-${index}` : field;
+      rows.push({
+        key, label: item.label, kind: w ? '量化条件' : '需确认条件',
+        required: `${item.op || '≥'} ${item.need} ${item.unit || ''}${item.note ? `（${item.note}）` : ''}`.trim(),
+        current: item.display || '待补充', status: item.status, exceed: item.exceed, w, isRequired: REQUIRED_FIELDS.has(field),
+        field, action: '核对数量', metric: item,
+      });
+    });
+    // 政策写得不清 / 系统判断不了的条件：列原文，需确认，不计分。
+    const conds = (policy.application?.checklist || []).filter(item => item.kind === 'condition');
+    (conds.length ? conds : policy.application?.checklist ? [] : policy.conditions).forEach((item, index) => {
+      const label = typeof item === 'string' ? item : item.label;
+      const note = typeof item === 'string' ? '' : item.note;
+      rows.push({ key: `confirm-${index}`, label, kind: '需确认条件', required: note ? `${note}（以原文为准）` : '以原文为准', current: '按政策原文核对', status: 'tbc', w: 0 });
+    });
+    rows.push({ key: 'materials', label: '申报材料', kind: '材料（不计入匹配度）', required: items.length ? `${items.length} 项必需材料` : '清单待核实', current: `${ready} 项已上传`, status: items.length ? (ready === items.length ? 'ready' : 'missing') : 'unknown', w: 0, ready, total: items.length, action: '补充材料' });
+    // 政策这一项置信度低：记“待确认”，不计分（PRD 8.2.2）。
+    rows.forEach(row => { if (row.field && policy.confidence?.metrics?.[row.field] === 'low') { row.status = 'tbc'; row.kind = '需确认条件'; } });
     return rows;
   }
   function policyScore(task, policy) {
     if (!task?.id) return null;
     const rows=comparisonRows(task,policy),materials=rows.find(row=>row.key==='materials');
-    return {...scoreOf(rows),rows,ready:materials.ready,total:materials.total,known:questions.filter(question=>answersOf(task)[question.key]).length,knownTotal:questions.length};
+    const result=scoreOf(rows);
+    // 合规记录只扣不加（手册 4.6）：严重失信 / 严重违法视为必备条件未达到，所有政策档位标“低”。
+    const severe = complianceOf(task) === '严重失信';
+    const grade = severe ? '低' : result.grade;
+    return {...result, grade, level: grade, severe, rows, ready:materials.ready,total:materials.total,known:questions.filter(question=>answersOf(task)[question.key]).length,knownTotal:questions.length};
   }
 
   /* 正在申报且匹配度为低时只提示，不拦截。 */
@@ -541,22 +639,22 @@
     const note = officialNote(policy, '以原文为准');
     return s ? `<span class="policy-stat policy-subsidy"><strong>${s.prefix ? `<small class="policy-stat-prefix">${esc(s.prefix)}</small>` : ''}${esc(s.value)}<small>${esc(s.unit)}</small></strong><small>预估补贴${confOf(policy, 'subsidy') === 'mid' ? ` · ${note}` : ''}</small></span>` : `<span class="policy-stat policy-subsidy is-text"><strong>${note}</strong><small>预估补贴</small></span>`;
   }
-  const industryMiss = (task, policy) => { const industry = factsOf(task).industry; return industry && policy.industries.length && !policy.industries.includes(industry) ? industry : ''; };
+  const industryMiss = (task, policy) => { const industry = factsOf(task).industry; return policy.industryLimited && industry && policy.industries.length && !policy.industries.includes(industry) ? industry : ''; };
   function scoreBadge(task, policy) {
     const result = policyScore(task, policy);
     const miss = industryMiss(task, policy);
     // 差距提示：行业不符优先于其他提示。
-    const tag = miss ? `<em class="policy-pause is-card">政策支持的行业不含${esc(miss)}，申报前核对</em>` : suggestPause(result, policy) ? '<em class="policy-pause is-card">条件差距较大，建议先补齐</em>' : result?.grade === '暂无法判断' && statusOf(policy) === 'open' ? '<em class="policy-pause is-card is-pending">补充企业信息后可以判断</em>' : '';
+    const tag = miss ? `<em class="policy-pause is-card">政策支持的行业不含${esc(miss)}，申报前核对</em>` : result?.missingRequired ? '<em class="policy-pause is-card">有必备条件未达到，建议人工咨询</em>' : suggestPause(result, policy) ? '<em class="policy-pause is-card">条件差距较大，建议先补齐</em>' : result?.grade === '待确定' && statusOf(policy) === 'open' ? '<em class="policy-pause is-card is-pending">补充企业信息后可以判断</em>' : '';
     return `<span class="policy-stats">${result ? scoreStat(result, policy, false) : ''}${subsidyStat(policy)}</span>${tag}`;
   }
   function scoreStat(result, policy, withPause = true) {
-    return result ? `<span class="policy-stat policy-score is-grade is-${{ 高: 'high', 中: 'mid', 低: 'low', 暂无法判断: 'pending' }[result.level] || 'text'}"><strong>${result.level}</strong><small>匹配度${GRADE_TIPS[result.level] ? helpTip(GRADE_TIPS[result.level]) : ''}</small>${withPause && suggestPause(result, policy) ? pauseTag : ''}</span>` : '';
+    return result ? `<span class="policy-stat policy-score is-grade is-${{ 高: 'high', 中: 'mid', 低: 'low', 待确定: 'pending' }[result.level] || 'text'}"><strong>${result.level}</strong><small>匹配度${GRADE_TIPS[result.level] ? helpTip(GRADE_TIPS[result.level]) : ''}</small>${withPause && suggestPause(result, policy) ? pauseTag : ''}</span>` : '';
   }
 
   function scoreText(task, policy) {
     const result = policy && policyScore(task, policy);
-    if (!result) return '告诉我企业名称和情况，我才能判断匹配度。';
-    return `本产品不估算获批概率。按现在的信息，「${policy.title}」的匹配度是${result.level}${result.pending ? `，还有 ${result.pending} 项待补充，补充后更准` : ''}${task.policyId === policy.id ? `；材料准备度 ${result.ready}/${result.total}` : ''}。${(ongoing(policy) ? { notice: '这项政策按纳税期常态办理，不是集中申报。' } : { open: '', notice: '这项政策暂未开放申报，开放后再来申报。', closed: '这项政策已截止，本期无法申报。' })[statusOf(policy)] || ''}最终以主管部门审核为准。`;
+    if (!result) return '告诉我企业名称，我才能判断匹配度。';
+    return `本产品不估算获批概率。按现在的信息，「${policy.title}」的匹配度是${result.level}${result.missingRequired ? '，有必备条件未达到' : ''}${result.pending ? `，还有 ${result.pending} 项待补充，补充后更准` : ''}${task.policyId === policy.id ? `；材料准备度 ${result.ready}/${result.total}` : ''}。${(ongoing(policy) ? { notice: '这项政策按纳税期常态办理，不是集中申报。' } : { open: '', notice: '这项政策暂未开放申报，开放后再来申报。', closed: '这项政策已截止，本期无法申报。' })[statusOf(policy)] || ''}最终以主管部门审核为准。`;
   }
 
   function scorePanel(task, policy) {
@@ -575,17 +673,20 @@
     return assistantBubble('想了解哪项政策？选一项，我来讲清楚。', `<div class="intake-card match-result${onlyOpen ? ' only-open' : ''}"><div class="match-result-bar">${onlyOpenToggle()}</div>${guide}<div class="match-policy-grid">${cards}</div></div>`, 'match', true);
   }
 
-  /* 数值门槛只用政策原文写明的（public-policy-data.js 里的 metrics），原文没写就不判断。 */
-  const policyRules = policy => policy?.metrics || [];
+  /* 数值门槛只用政策原文写明的（public-policy-data.js 里的 metrics / demands），原文没写就不判断。 */
   /* 企业接口：原型还没接集团企业地图接口，这里只收录核对过公开来源的真实企业（来源见 public-policy-sources.md）。
-     不在名单里的企业按“查不到工商信息”处理；没核实到的字段留空，画像里显示“待补充 / 待核实”。 */
+     不在名单里的企业按“查不到工商信息”处理；没核实到的字段留空，画像里显示“待补充 / 待核实”。
+     主体类型、合规记录按企业地图口径自动带出（手册 P11）：公开渠道查不到失信记录的记“正常”。 */
   const REAL_COMPANIES = {
-    北京久其金建科技有限公司: { region: '北京市', industry: '软件信息', founded: '2017-04-13' },
-    北京华夏电通科技股份有限公司: { region: '北京市', industry: '软件信息', founded: '2001-09-14' },
-    北京久其政务软件股份有限公司: { region: '北京市', industry: '软件信息', founded: '2006-01-12' },
-    上海久其软件有限公司: { region: '上海市', industry: '软件信息' },
-    成都久其软件有限公司: { region: '成都市', industry: '软件信息' },
-    广东久其软件有限公司: { region: '广州市', industry: '软件信息' },
+    北京久其金建科技有限公司: { region: '北京市', industry: '软件信息', founded: '2017-04-13', type: '有限责任公司', compliance: '正常' },
+    北京华夏电通科技股份有限公司: { region: '北京市', industry: '软件信息', founded: '2001-09-14', type: '股份有限公司', compliance: '正常' },
+    北京久其政务软件股份有限公司: { region: '北京市', industry: '软件信息', founded: '2006-01-12', type: '股份有限公司', compliance: '正常' },
+    上海久其软件有限公司: { region: '上海市', industry: '软件信息', type: '有限责任公司', compliance: '正常' },
+    成都久其软件有限公司: { region: '成都市', industry: '软件信息', type: '有限责任公司', compliance: '正常' },
+    广东久其软件有限公司: { region: '广州市', industry: '软件信息', type: '有限责任公司', compliance: '正常' },
+    // 2026-11-26 正向演示（余姚研发攻关项目）：注册地余姚市，本期地区只到市，按宁波市判。
+    // qualifications（已有资质）为演示设定，没有在企业地图核实。
+    '舜宇光学科技（集团）有限公司': { region: '宁波市', industry: '先进制造', type: '有限责任公司', compliance: '正常', qualifications: ['高新技术企业'] },
   };
   /* 工商状态为注销、吊销：按“查不到企业”处理（PRD 6.3 第 2 条）。华宇信码 2026-06-29 完成注销登记。 */
   const REVOKED_NAMES = { 北京华宇信码技术有限公司: '注销' };
@@ -608,8 +709,23 @@
   }
   function apiProfile(name) {
     const key = (name || '').trim(), company = REAL_COMPANIES[key];
-    if (!key || !company || REVOKED_NAMES[key] || sim('apiTimeout')) return { region: '', industry: '' };
-    return { region: company.region, industry: company.industry };
+    if (!key || !company || REVOKED_NAMES[key] || sim('apiTimeout')) return { region: '', industry: '', type: '', staff: '', entityStatus: '', compliance: '' };
+    return { region: company.region, industry: company.industry, type: company.type || '', staff: company.staff || '', entityStatus: '存续', compliance: company.compliance || '正常', qualifications: company.qualifications || null };
+  }
+  /* 合规记录（手册 4.6，只扣不加）：正常不计分；严重失信 / 严重违法 → 所有政策标“低”；经营异常 / 一般处罚 → 不影响档位，只在结果页顶部提示。 */
+  function complianceOf(task) {
+    const answers = answersOf(task);
+    if (answers.compliance) return answers.compliance;
+    if (!task || companyNotFound(task)) return '';
+    if (sim('dishonest')) return '严重失信';
+    if (sim('risk')) return '经营异常';
+    return apiProfile(task.company.name).compliance || '';
+  }
+  function complianceNotice(task) {
+    const level = complianceOf(task);
+    if (!level || level === '正常') return '';
+    if (level === '严重失信') return `<div class="compliance-notice is-severe" role="status"><p><strong>您的企业存在严重失信记录，多数政策申报会受影响。</strong>本轮匹配的所有政策已按「低」档显示。</p><button type="button" class="text-button" data-action="guidance-service">信用修复人工咨询</button></div>`;
+    return `<div class="compliance-notice" role="status"><p>您的企业有${esc(level)}记录，不影响本轮档位，部分政策申报前需先处理。</p><button type="button" class="text-button" data-action="guidance-service">联系人工咨询</button></div>`;
   }
   const notFoundNotice = task => companyApiFailed(task) ? `<div class="company-notfound" role="status"><p><strong>企业信息暂时查询失败，请稍后重试。</strong>下面的结果只按您填写的信息匹配。</p><button type="button" class="text-button" data-action="company-retry" data-task="${esc(task.id)}">重试</button></div>` : companyNotFound(task) ? `<div class="company-notfound" role="status"><p><strong>没有查到「${esc(task.company.name)}」的工商信息。</strong>请核对企业全称是否和营业执照一致。下面的结果只按您填写的信息匹配，信息还不完整，补充专利、软著等信息后结果更准。</p><button type="button" class="text-button" data-action="company-edit-inline" data-task="${esc(task.id)}">修改企业名称或补充信息</button></div>` : '';
   function mockCompanyData(task) {
@@ -625,45 +741,85 @@
       return [key,answers[field]!==''&&Number.isInteger(n)&&n>=0&&n<=1000000?n:null];
     }));
   }
-  /* 画像固定 12 项，右侧画像卡和确认卡用同一份，“已了解 X/12”的分母不变。 */
-  const PORTRAIT_LABELS = ['企业名称', '所在地区', '所属行业', '成立年限', '企业规模', '专利数量', '软件著作权', ...questions.map(question => question.label)];
+  /* 画像 = 企业地图自动带出的字段 + 按政策追问的字段（手册第 2 节），右侧画像卡和确认卡用同一份。 */
+  const PORTRAIT_LABELS = ['企业名称', '所在地区', '主体状态', '主体类型', '所属行业', '成立年限', '员工人数', '合规记录', '知识产权', ...questions.map(question => question.label)];
   function portraitRows(task) {
-    const answers = answersOf(task);
+    const facts = factsOf(task), answers = answersOf(task);
     const region = (answers.region === '其他地区' ? '' : answers.region) || task.company.region || '';
     const industry = (answers.industry === '其他行业' ? '' : answers.industry) || task.company.industry || '';
-    const company = companyRows(task);
-    const pick = label => company.find(([key]) => key === label)?.[1] || '';
-    return [['企业名称', task.company.name], ['所在地区', region], ['所属行业', industry], ['成立年限', pick('成立年限')], ['企业规模', pick('企业规模')], ['专利数量', pick('专利数量')], ['软件著作权', pick('软件著作权')], ...questions.map(question => [question.label, answers[question.key]])];
+    const ip = facts.ip === null || facts.ip === undefined ? (companyNotFound(task) ? '' : '待核实') : `${facts.ip} 项`;
+    return [
+      ['企业名称', task.company.name],
+      ['所在地区', region],
+      ['主体状态', companyNotFound(task) ? '' : facts.entityStatus || ''],
+      ['主体类型', facts.type || answers.type || ''],
+      ['所属行业', industry],
+      ['成立年限', facts.foundedYears === null || facts.foundedYears === undefined ? '' : `${facts.foundedYears} 年`],
+      ['员工人数', facts.staff || ''],
+      ['合规记录', facts.compliance || ''],
+      ['知识产权', ip],
+      ...questions.map(question => [question.label, answers[question.key] ? (question.type === 'number' && question.unit ? `${answers[question.key]} ${question.unit}` : answers[question.key]) : '']),
+    ];
   }
   const companyRows = task => {
-    const data = mockCompanyData(task);
-    if (!data) return [];
-    const answers = answersOf(task), founded = companyNotFound(task) ? '' : REAL_COMPANIES[companyKey(task)]?.founded || '';
-    // 成立年限按工商成立日期算到今天；人数没有核实到公开来源，只用用户填写的。
-    const years = founded ? Math.max(0, Math.floor((Date.parse(today()) - Date.parse(founded)) / 31557600000)) : null;
-    const base = [['成立年限', years === null ? answers.founded || '' : `${years} 年`], ['企业规模', answers.scale || '']];
-    return [...base, ['专利数量', data.patents===null?(companyNotFound(task)?'':'待核实'):`${data.patents} 个`], ['软件著作权', data.copyrights===null?(companyNotFound(task)?'':'待核实'):`${data.copyrights} 个`]];
+    const facts = factsOf(task);
+    if (!task?.company?.name) return [];
+    return [
+      ['主体状态', companyNotFound(task) ? '' : facts.entityStatus || ''],
+      ['主体类型', facts.type || ''],
+      ['成立年限', facts.foundedYears === null || facts.foundedYears === undefined ? '' : `${facts.foundedYears} 年`],
+      ['员工人数', facts.staff || ''],
+      ['合规记录', facts.compliance || ''],
+    ];
   };
 
-  /* 区间条件（PRD V2.2 8.1.4）：整个区间都达到算满足，整个区间都达不到算不满足；
-     跨过门槛时记“待确认”，用追问气泡让用户点“达到了 / 没达到 / 不确定”，答案存在画像里。 */
+  /* 区间字段（营收、增长率、研发人数占比、资产负债率、员工人数）和旧政策的研发费占比：
+     整个区间都达到算满足，整个区间都达不到算不满足；跨过门槛时记“待补充（待确认）”，用追问让用户点“达到了 / 没达到 / 不确定”。 */
   const REVENUE_RANGES = { '500万以下': [0, 500], '500-2000万': [500, 2000], '2000-5000万': [2000, 5000], '5000万-1亿': [5000, 10000], '1-2亿': [10000, 20000], '2-5亿': [20000, 50000], '5-10亿': [50000, 100000], '10亿以上': [100000, Infinity] };
   const RD_RANGES = { '2%以下': [0, 2], '2%-3%': [2, 3], '3%-4%': [3, 4], '4%-5%': [4, 5], '5%-10%': [5, 10], '10%-15%': [10, 15], '15%以上': [15, Infinity] };
-  const RANGES = { revenue: REVENUE_RANGES, rd: RD_RANGES };
+  const STAFF_RANGES = { '20人以下': [0, 20], '20-99人': [20, 100], '100-299人': [100, 300], '300-999人': [300, 1000], '1000人以上': [1000, Infinity] };
+  const RANGES = { revenue: REVENUE_RANGES, growth: { '下降': [-Infinity, 0], '0-5%': [0, 5], '5-10%': [5, 10], '10-15%': [10, 15], '15%以上': [15, Infinity] }, rdShare: { '5%以下': [0, 5], '5-10%': [5, 10], '10-15%': [10, 15], '15%以上': [15, Infinity] }, debtRatio: { '50%以下': [0, 50], '50-70%': [50, 70], '70%以上': [70, 100] }, staff: STAFF_RANGES, rd: RD_RANGES };
   const rangeKey = (key, need) => `${key === 'revenue' ? 'revenue' : key}At_${need}`;
-  function revenueCheck(task, need, key = 'revenue') {
-    const answers = answersOf(task), pick = answers[key], range = RANGES[key][pick];
-    if (!range) return { have: null, display: '待补充' };
-    const [low, high] = range, said = answers[rangeKey(key, need)];
-    if (low >= need) return { have: need, display: pick };
-    if (high < need) return { have: low, display: pick };
-    if (said === 'yes') return { have: need, display: `${pick}（已确认达到）` };
-    if (said === 'no') return { have: low, display: `${pick}（已确认没达到）` };
-    return { have: null, display: `${pick}（待确认）`, straddle: true, pick, unsure: said === 'unsure' };
+  /* 字段取值：追问字段读企业所填（区间选项或精确数），自动字段读企业地图；原型没有对应字段的记“需确认”。 */
+  function factOf(facts, sourceKey, field) {
+    const key = sourceKey || field;
+    const def = questions.find(question => question.key === field);
+    if (def) {
+      const raw = facts[key];
+      if (raw === undefined || raw === null || raw === '') return { state: 'empty' };
+      // 先按区间选项对（营收、研发费占比等），再按精确数（对照表里填的数字）。
+      const range = RANGES[key] && RANGES[key][raw];
+      if (range) return { state: 'range', range, display: raw };
+      if (def.type === 'number') { const num = Number(raw); return Number.isFinite(num) ? { state: 'value', value: num, display: `${raw} ${def.unit || ''}`.trim() } : { state: 'empty' }; }
+      const num = Number(String(raw).replace(/[^\d.-]/g, ''));
+      return Number.isFinite(num) ? { state: 'value', value: num, display: String(raw) } : { state: 'empty' };
+    }
+    if (field === 'founded') return facts.foundedYears === null || facts.foundedYears === undefined ? { state: 'empty' } : { state: 'value', value: facts.foundedYears, display: `${facts.foundedYears} 年` };
+    if (field === 'ip') return facts.ip === null || facts.ip === undefined ? { state: 'empty' } : { state: 'value', value: facts.ip, display: `${facts.ip} 项` };
+    if (field === 'staff') { const raw = facts.staff; if (!raw) return { state: 'empty' }; const range = STAFF_RANGES[raw]; return range ? { state: 'range', range, display: raw } : { state: 'empty' }; }
+    // 已有资质：企业地图有资质标记时按“有 / 没有”判，没有标记的记“需确认”。
+    if (field === 'qualification') return Array.isArray(facts.qualifications) ? { state: 'list', list: facts.qualifications, display: facts.qualifications.join('、') || '无' } : { state: 'noField' };
+    // 研发费用占营收比例：系统用研发费用总额 ÷ 营业收入算出（手册第 2 节），营收是区间时得到比例区间。
+    if (field === 'rdRatio') {
+      const fee = factOf(facts, 'rdFee', 'rdFee'), rev = factOf(facts, 'revenue', 'revenue');
+      if (fee.state !== 'value' || (rev.state !== 'value' && rev.state !== 'range')) return { state: 'empty' };
+      const pct = base => base > 0 ? Math.round(fee.value / base * 1000) / 10 : Infinity;
+      if (rev.state === 'value') return { state: 'value', value: pct(rev.value), display: `${pct(rev.value)}%` };
+      const [lowRev, highRev] = rev.range, low = pct(highRev), high = pct(lowRev);
+      return { state: 'range', range: [low, high], display: high === Infinity ? `${low}% 以上` : `${low}%–${high}%` };
+    }
+    // social（社保参保人数）等：原型还没有对应字段，按“需确认”处理，不计分。
+    return { state: 'noField' };
   }
+  /* 旧政策的 metrics（研发费占比、专利、软著）换算到手册字段口径；已截止政策只在解读抽屉里用到。 */
+  const LEGACY_FIELD = { rd: 'rdFee', patents: 'ip', copyrights: 'ip' };
+  const legacyMetrics = policy => (policy.metrics || []).map(rule => ({ ...rule, field: LEGACY_FIELD[rule.key] || rule.key, op: '≥', legacy: true }));
   function policyMetrics(task, policy) {
-    const data = mockCompanyData(task);
-    return policyRules(policy).map(rule => rule.interval ? (() => { const r = revenueCheck(task, rule.need, rule.key); return { ...rule, ...r, met: r.have !== null && r.have >= rule.need }; })() : ({ ...rule, have: data ? data[rule.key] : null, met: data && data[rule.key]!==null ? data[rule.key] >= rule.need : false }));
+    const facts = factsOf(task);
+    return [...(policy.demands || []), ...legacyMetrics(policy)].map(demand => {
+      const judged = judgeDemand(facts, demand);
+      return { ...demand, ...judged, met: judged.status === 'ready' };
+    });
   }
 
   const metricUnit = unit => unit === '人' ? '名' : unit;
@@ -890,28 +1046,25 @@
     return `<section class="interpret-services svc-section" data-service-kind="${kind}" aria-label="服务推荐"><div class="interpret-section-heading">${num ? `<span>${num}</span>` : ''}<div><h3>${esc(title || meta.title)}</h3><p>${esc(sub || meta.sub)}</p></div>${refresh}<button type="button" class="text-button svc-dismiss" data-action="service-dismiss" data-kind="${kind}">暂不需要</button></div><div class="interpret-service-grid" aria-live="polite">${cards || kindCards(kind)}</div></section>`;
   }
   const serviceRec = kind => serviceSection(kind);
-  const rdLowOptions = ['2%以下', '2%-3%'];
-  /* 资质差一点：量化条件只差 1 项，且只差 1～2 个（PRD 8.2.3“差一点”）。研发费用不达标：研发费占比选了 3% 以下，政策是研发或资质方向。 */
+  /* 资质差一点：量化条件只差 1 项，且只差 1～2 个（PRD 8.2.3“差一点”）。 */
   function interpretServices(task, policy, result) {
     if (!task.id || statusOf(policy) !== 'open') return '';
     const gaps = (result?.rows || []).filter(row => row.kind === '量化条件' && row.metric?.have !== null && row.status === 'missing');
-    const rd = answersOf(task).rd;
     const out = [];
-    // 差的是专利、软著时走知识产权推荐（下方专利服务），这里不重复。
+    // 差的是知识产权时走知识产权推荐（下方专利服务），这里不重复。
     if (gaps.length === 1 && !['patents', 'copyrights'].includes(gaps[0].key) && gaps[0].metric.need - gaps[0].metric.have <= 2) out.push(serviceRec('qualification'));
-    if (rdLowOptions.includes(rd) && ['财政补贴', '资质荣誉'].includes(policy.supportType)) out.push(serviceRec('rdFee'));
     return out.join('');
   }
   function adviceMarkup(policy,result) {
     if(!result||statusOf(policy)!=='open')return '';
-    // 先补哪项（PRD V2.2 8.1.6）：排除地区、行业；待补充项排最前（只要告诉我们信息），其次差距最小的一项。
+    // 先补哪项：待补充项排最前（只要告诉我们信息），其次差距最小的一项。
     const unknownStep=result.rows.find(row=>row.kind==='量化条件'&&row.status==='unknown');
     const gaps=result.rows.filter(row=>row.kind==='量化条件'&&row.metric.have!==null&&row.status==='missing'&&!row.metric.interval);
     const step=unknownStep?null:[...gaps].sort((a,b)=>(a.metric.need-a.metric.have)/a.metric.need-(b.metric.need-b.metric.have)/b.metric.need)[0];
-    const next=step?scoreOf(result.rows.map(row=>row===step?{...row,status:'ready',metric:{...row.metric,have:row.metric.need}}:row)):result;
+    const next=step?scoreOf(result.rows.map(row=>row===step?{...row,status:'ready'}:row)):result;
     const lift=step&&result.score!==null&&next.grade!==result.grade;
-    const now=`按现有信息，这项政策的匹配度为 <b>${result.level}</b>`;
-    const text=unknownStep?`${now}。我还不知道您的${esc(unknownStep.label)}，告诉我后帮您重新匹配。`:step?`${now}，补充 ${step.metric.need-step.metric.have} ${metricUnit(step.metric.unit)}${esc(step.metric.label)}后${lift?`，匹配度可从${result.level}提到 <b>${next.level}</b>`:'，更接近政策要求'}。`:result.pending?`${now}。还有 ${result.pending} 项待补充，补充后更准。`:(()=>{const tbc=result.rows.filter(row=>isScored(row)&&row.status==='tbc').length,ind=result.rows.find(row=>row.key==='industry'&&row.status==='missing');return ind||tbc?`${now}。${ind?'企业行业不在政策支持的行业里，申报前核对。':''}${tbc?`还有 ${tbc} 项政策写得不够明确（待确认），以原文为准。`:''}`:`${now}。条件已基本符合，可以准备申报材料。`;})();
+    const now=`按现有信息，这项政策的档位为 <b>${result.level}</b>`;
+    const text=result.missingRequired?`${now}，有必备条件未达到，不论分数都按「低」档显示，建议先人工咨询。`:result.level==='待确定'?`${now}。能判断的条件不足 2 条，暂不定档；“申报前请确认”里的条件请对照政策原文核对，需要时可以人工咨询。`:unknownStep?`${now}。我还不知道您的${esc(unknownStep.label)}${unknownStep.isRequired?'（这是必备条件）':''}，告诉我后帮您重新计算匹配度。`:step?`${now}，${esc(step.label)}还差 ${step.metric.need-step.metric.have} ${metricUnit(step.metric.unit)}，补齐后${lift?`档位可从${result.level}提到 <b>${next.level}</b>`:'更接近政策要求'}。`:result.pending?`${now}。还有 ${result.pending} 项待补充，补充后更准。`:(()=>{const tbc=result.rows.filter(row=>isScored(row)&&row.status==='tbc').length,ind=result.rows.find(row=>row.key==='industry'&&row.status==='missing');return ind||tbc?`${now}。${ind?'企业行业不在政策支持的行业里，申报前核对。':''}${tbc?`还有 ${tbc} 项政策写得不够明确（需确认），以原文为准。`:''}`:`${now}。条件已基本符合，可以准备申报材料。`;})();
     const meter=lift?`<div class="interpret-advice-lift" aria-hidden="true"><div class="interpret-advice-numbers"><span>${result.level}</span>${icon('arrow')}<strong>${next.level}</strong></div><div class="interpret-advice-bar"><i style="width:${result.shown}%"></i><i class="is-gain" style="width:${next.shown-result.shown}%"></i></div></div>`:'';
     return `<aside class="interpret-advice${meter?'':' is-plain'}" aria-label="AI 建议"><div class="interpret-advice-copy"><span class="interpret-advice-tag">${icon('spark')} AI 建议</span><p>${text}</p><small>按现有信息判断，仅供参考，以主管部门审核为准。</small>${feedbackMarkup('diagnosis', policy.id)}</div>${meter}</aside>`;
   }
@@ -937,11 +1090,11 @@
     return `<div class="comparison-edit"><input id="interpret-field" ${attrs} ${field} value="${esc(value??'')}" aria-label="企业${esc(row.label)}">${row.metric?`<span>${esc(row.metric.unit)}</span>`:''}${options}</div>`;
   }
   function comparisonRow(task,policy,row) {
-    const labels=row.key==='materials'?{ready:'已上传',missing:'待补充',unknown:'待补充'}:{ready:'符合',missing:'可能不符',unknown:'待补充',tbc:'待确认'},editing=interpretEditKey===row.key;
+    const labels=row.key==='materials'?{ready:'已上传',missing:'待补充',unknown:'待补充'}:{ready:row.exceed?'超过':'达到',missing:'未达到',unknown:'待补充',tbc:'需确认'},editing=interpretEditKey===row.key;
     const attrs=`data-task="${esc(task.id)}" data-policy="${esc(policy.id)}" data-key="${row.key}"`;
-    const current=editing?comparisonEditor(task,row,attrs):`${esc(row.current)}<span class="comparison-state is-${row.status}">${labels[row.status]}${row.key!=='materials'&&STATE_TIPS[labels[row.status]]?helpTip(STATE_TIPS[labels[row.status]]):''}</span>`;
+    const current=editing?comparisonEditor(task,row,attrs):`${esc(row.current)}<span class="comparison-state is-${row.status}${row.exceed?' is-advantage':''}">${labels[row.status]}${row.key!=='materials'&&STATE_TIPS[labels[row.status]]?helpTip(STATE_TIPS[labels[row.status]]):''}</span>`;
     const actions=editing?'':row.key==='materials'?`<button type="button" class="text-button" data-action="interpret-todo" ${attrs}>${row.status==='ready'?'查看材料':row.action}</button>`:`<button type="button" class="text-button" data-action="interpret-todo" ${attrs} aria-label="编辑${esc(row.label)}">编辑</button>`;
-    return `<tr data-dimension="${row.key}" data-state="${row.status}"${editing?' class="is-editing"':''}><th scope="row">${row.label}</th><td>${esc(row.required)}${row.metric?`<small class="interpret-rule-note">${row.metric.unit==='%'?'计算口径':'数量口径'}待原文核实</small>`:''}</td><td>${current}</td><td>${actions}</td></tr>`;
+    return `<tr data-dimension="${row.key}" data-state="${row.status}"${editing?' class="is-editing"':''}><th scope="row">${row.isRequired ? '<em class="comparison-required">必备</em>' : ''}${row.label}</th><td>${esc(row.required)}${row.metric?`<small class="interpret-rule-note">${row.metric.unit==='%'?'计算口径':'数量口径'}以政策原文为准</small>`:''}</td><td>${current}</td><td>${actions}</td></tr>`;
   }
   // 选政策时只对照条件；申报材料等选定政策后在“申报材料”里收集，不在解读里出现。
   const renderComparison = (task,policy) => { document.querySelector('.interpret-table tbody').innerHTML = comparisonRows(task,policy).filter(row=>row.key!=='materials').map(row=>comparisonRow(task,policy,row)).join(''); };
@@ -964,15 +1117,17 @@
     if(!row)return;
     // 输入“上海”也能对上“上海市”，后面的匹配和评分都按标准写法算。
     const typed=field.value.trim(),value=!row.metric&&typed.length>=2&&fieldOptions(key).find(option=>option.startsWith(typed))||typed;
-    const invalid=row.metric&&(field.validity?.badInput||value!==''&&(!Number.isInteger(Number(value))||Number(value)<0||Number(value)>1000000));
+    const invalid=row.metric&&(field.validity?.badInput||value!==''&&(!Number.isFinite(Number(value))||Number(value)<0||Number(value)>10000000));
     const changed=String(row.metric?row.metric.have??'':factsOf(task)[key]||'')!==value;
     if(invalid||!changed){
       renderComparison(task,policy);
-      if(invalid)window.PolicyUI.toast('请填写有效的非负整数，这次没有保存。');
+      if(invalid)window.PolicyUI.toast('请填写有效的非负数，这次没有保存。');
       if(focusBack)focusComparisonEdit(key);
       return;
     }
-    const answers={...answersOf(task),[row.metric?`metric_${key}`:key]:value};
+    // 数值条件按手册字段存（按政策追问的字段），旧政策的专利、软著沿用 metric_ 前缀。
+    const saveKey=row.metric?(row.metric.legacy?(row.metric.key==='rd'?'rd':`metric_${row.metric.key}`):row.metric.field):key;
+    const answers={...answersOf(task),[saveKey]:value};
     const patch={intake:{...(task.intake||{stage:'ready',files:[]}),answers},...(!row.metric?{company:{[key]:value}}:{}),status:'processing',steps:{diagnosis:false,assembly:false,review:false}};
     if(!S().updateTask(task.id,patch)){renderComparison(task,policy);window.PolicyUI.toast('未能保存，请重试。');return;}
     const current=S().getTask(task.id);window.PolicyUI.refresh();updateInterpretDrawer(current,policy);
@@ -984,11 +1139,30 @@
     const items = (policy.application?.checklist || []).filter(item => item.kind === 'condition');
     return items.length ? `<div class="interpret-conditions"><h4>申报前请确认</h4><ul>${items.map(item => `<li>${esc(item.label)}${item.note ? `<small>${esc(item.note)}</small>` : ''}</li>`).join('')}</ul></div>` : '';
   }
+  /* 诊断四块（手册第 5 节）：①已满足（“超过”另标优势项）②差距 ③待补充 ④申报前请确认。 */
+  function diagnosisBlocks(task, policy, rows) {
+    const metrics = rows.filter(isScored);
+    const tbcRows = rows.filter(row => row.status === 'tbc');
+    const met = metrics.filter(row => row.status === 'ready');
+    const gap = metrics.filter(row => row.status === 'missing');
+    const todo = metrics.filter(row => row.status === 'unknown');
+    const gapText = row => {
+      const diff = row.metric ? (row.metric.op === '≤' ? row.metric.have - row.metric.need : row.metric.need - row.metric.have) : NaN;
+      return `政策要求 ${row.required}，企业现状 ${row.current}${Number.isFinite(diff) && diff > 0 ? `，差 ${Math.round(diff * 100) / 100} ${metricUnit(row.metric.unit || '')}` : ''}`;
+    };
+    const blocks = [];
+    if (met.length) blocks.push(`<div class="diag-block is-met"><h4>已满足</h4><ul>${met.map(row => `<li>${esc(row.label)}：${esc(row.current)}${row.exceed ? '<em class="diag-advantage">优势项</em>' : ''}</li>`).join('')}</ul></div>`);
+    const requiredGap = gap.filter(row => row.isRequired), plainGap = gap.filter(row => !row.isRequired);
+    if (gap.length) blocks.push(`<div class="diag-block is-gap"><h4>差距</h4><ul>${requiredGap.map(row => `<li class="is-required"><b>必备条件未达到</b>${esc(gapText(row))}</li>`).join('')}${plainGap.map(row => `<li>${esc(row.label)}：${esc(gapText(row))}</li>`).join('')}</ul>${requiredGap.length ? '<button type="button" class="text-button" data-action="guidance-service">人工咨询</button>' : ''}</div>`);
+    if (todo.length) blocks.push(`<div class="diag-block is-todo"><h4>待补充</h4><ul>${todo.filter(row => row.isRequired).map(row => `<li class="is-required"><b>这是必备条件，请先补充</b>${esc(row.label)}</li>`).join('')}${todo.filter(row => !row.isRequired).map(row => `<li>${esc(row.label)}：在下方对照表补填后重新计算达标度</li>`).join('')}</ul></div>`);
+    if (tbcRows.length) blocks.push(`<div class="diag-block is-confirm"><h4>申报前请确认</h4><ul>${tbcRows.map(row => `<li>${esc(row.label)}${row.current && row.current !== '按政策原文核对' ? `<small>${esc(row.current)}</small>` : ''}</li>`).join('')}</ul></div>`);
+    return blocks.length ? `<div class="interpret-diagnosis">${blocks.join('')}</div>` : '';
+  }
   function interpretCard(task, policy) {
     const result=policyScore(task,policy),rows=result?.rows||comparisonRows(task,policy),materials=rows.find(row=>row.key==='materials');
     const pending=rows.filter(row=>row.status!=='ready'&&row.key!=='materials').length;
-    const facts=[['政策类型',esc(policy.supportType)],['适用地区',esc(policy.region)],['申报时间',confOf(policy,'applicationEnd')==='low'?officialNote(policy,'见政策原文'):esc(windowText(policy)),confTag(confOf(policy,'applicationEnd'),policy)],...(policy.subsidy?[['扶持金额',esc(`${policy.subsidy.prefix||''}${policy.subsidy.value}${policy.subsidy.unit}`),confTag(confOf(policy,'subsidy'),policy)]]:[]),['发布机构',esc(policy.agency)]];
-    return `<div class="policy-review"><section class="interpret-overview"><div class="interpret-eyebrow">01 / 了解政策</div><h3><a class="interpret-title" href="${esc(policy.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(policy.title)} ${icon('arrow')}</a></h3>${sim('interpretFail') ? '' : `<p class="interpret-summary">${esc(policy.summary)}</p>`}<div class="interpret-summary-grid"><dl class="interpret-facts">${facts.map(([label,value,tag=''])=>`<div><dt>${label}</dt><dd>${value}${tag}</dd></div>`).join('')}</dl><div class="interpret-score-result"><span>匹配度</span><strong data-total-score="${result?.score??''}">${result?result.level:'—'}</strong><div><b>${pending}</b> 项可能不符或未知</div>${suggestPause(result, policy) ? pauseTag : ''}<small>${{ open: '只有地区做准入判断；行业和其余条件每项权重相同，满足越多越高；材料不计入匹配度', notice: ongoing(policy) ? '按纳税期常态办理，不是集中申报' : '暂未开放申报，可以提前准备', closed: '本期已截止，无法申报' }[statusOf(policy)]}</small></div></div>${conditionsNotice(policy)}</section><section class="interpret-comparison" aria-labelledby="comparison-title"><div class="interpret-section-heading"><span>02</span><div><h3 id="comparison-title">逐项对照，看看还差什么</h3><p>逐项核对企业现状是否符合政策要求。</p></div></div><div class="interpret-table-scroll" tabindex="0" role="region" aria-label="政策条件对照表"><table class="interpret-table"><thead><tr><th scope="col">对照维度</th><th scope="col">政策要求</th><th scope="col">企业现状</th><th scope="col">操作</th></tr></thead><tbody>${rows.filter(row=>row.key!=='materials').map(row=>comparisonRow(task,policy,row)).join('')}</tbody></table></div>${rangeAskInline(task,policy)}<div id="interpret-supplement" aria-live="polite"></div>${policy.applicationTimeNote?`<p class="interpret-time-note">${esc(policy.applicationTimeNote)}</p>`:''}</section>${adviceMarkup(policy,result)}${interpretServices(task,policy,result)}${recommendationMarkup(task,policy,rows)}<p class="interpret-disclaimer">本产品仅提供信息检索、解读与申报指引，不构成申报或权益承诺，最终以政府官方平台审核为准。</p>${feedbackMarkup('interpret', policy.id)}</div>`;
+    const facts=[['政策类型',esc(policy.supportType)],['适用地区',esc(policy.region)],['申报时间',confOf(policy,'applicationEnd')==='low'?officialNote(policy,'见政策原文'):esc(windowText(policy)),confTag(confOf(policy,'applicationEnd'),policy)],...(policy.subsidy?[['扶持金额',esc(`${policy.subsidy.prefix||''}${policy.subsidy.value}${policy.subsidy.unit}`),confTag(confOf(policy,'subsidy'),policy)]]:[]),['发布机构',esc(policy.agency)],['分值口径',`${bureauOf(policy)}${bureauOf(policy)==='通用'?'':'口'}分值`]];
+    return `<div class="policy-review"><section class="interpret-overview"><div class="interpret-eyebrow">01 / 了解政策</div><h3><a class="interpret-title" href="${esc(policy.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(policy.title)} ${icon('arrow')}</a></h3>${sim('interpretFail') ? '' : `<p class="interpret-summary">${esc(policy.summary)}</p>`}<div class="interpret-summary-grid"><dl class="interpret-facts">${facts.map(([label,value,tag=''])=>`<div><dt>${label}</dt><dd>${value}${tag}</dd></div>`).join('')}</dl><div class="interpret-score-result"><span>匹配度</span><strong data-total-score="${result?.score??''}">${result?result.level:'—'}</strong><div>${result && result.score !== null ? `达标度 ${result.score} 分，` : ''}<b>${pending}</b> 项未达到 / 待补充 / 需确认</div>${suggestPause(result, policy) ? pauseTag : ''}<small>${{ open: '匹配度按条件达标情况计算，条件分值按发文机构归口（工信 / 科技 / 人社 / 通用）', notice: ongoing(policy) ? '按纳税期常态办理，不是集中申报' : '暂未开放申报，可以提前准备', closed: '本期已截止，无法申报' }[statusOf(policy)]}</small></div></div></section><section class="interpret-comparison" aria-labelledby="comparison-title"><div class="interpret-section-heading"><span>02</span><div><h3 id="comparison-title">诊断与逐项对照</h3><p>匹配度怎么来的、差什么、补什么，逐项核对企业现状是否符合政策要求。</p></div></div>${diagnosisBlocks(task, policy, rows)}<div class="interpret-table-scroll" tabindex="0" role="region" aria-label="政策条件对照表"><table class="interpret-table"><thead><tr><th scope="col">对照维度</th><th scope="col">政策要求</th><th scope="col">企业现状</th><th scope="col">操作</th></tr></thead><tbody>${rows.filter(row=>row.key!=='materials').map(row=>comparisonRow(task,policy,row)).join('')}</tbody></table></div>${rangeAskInline(task,policy)}<div id="interpret-supplement" aria-live="polite"></div>${policy.applicationTimeNote?`<p class="interpret-time-note">${esc(policy.applicationTimeNote)}</p>`:''}</section>${adviceMarkup(policy,result)}${interpretServices(task,policy,result)}${recommendationMarkup(task,policy,rows)}<p class="interpret-disclaimer">本产品仅提供信息检索、解读与申报指引，不构成申报或权益承诺，最终以政府官方平台审核为准。</p>${feedbackMarkup('interpret', policy.id)}</div>`;
   }
 
   function updateInterpretDrawer(task,policy) {
@@ -1058,13 +1232,14 @@
   function portraitField(task, question) {
     const answers = answersOf(task);
     const current = question.key === 'region' ? answers.region || task.company.region : question.key === 'industry' ? answers.industry || task.company.industry : answers[question.key];
-    const options = [...question.options, ...(current && !question.options.includes(current) ? [current] : [])];
+    if (question.type === 'number') return `<input id="portrait-${question.key}" type="number" min="0" max="10000000" step="0.1" data-portrait-field="${question.key}" value="${esc(current ?? '')}" aria-label="${esc(question.label)}（${esc(question.unit || '')}）">`;
+    const options = [...(question.options || []), ...(current && !question.options?.includes(current) ? [current] : [])];
     return `<select id="portrait-${question.key}" data-portrait-field="${question.key}"><option value="">待补充</option>${options.map(option => `<option value="${esc(option)}"${option === current ? ' selected' : ''}>${esc(option)}</option>`).join('')}</select>`;
   }
 
   function portraitEditor(task) {
-    // 地区、行业来自企业接口，接口不对或没有时用户在这里改。
-    const facts = [{ key: 'region', label: '所在地区', options: fieldOptions('region') }, { key: 'industry', label: '所属行业', options: fieldOptions('industry') }];
+    // 地区、行业来自企业接口，接口不对或没有时用户在这里改；数值字段直接填数字。
+    const facts = [{ key: 'region', label: '所在地区', options: fieldOptions('region') }, { key: 'industry', label: '所属行业', options: fieldOptions('industry') }, { key: 'staff', label: '员工人数', options: keyFieldOptions.staff.options }];
     const rows = [...facts, ...questions].map(question => `<div><label for="portrait-${question.key}">${esc(question.label)}</label>${portraitField(task, question)}</div>`).join('');
     return `<div class="workspace-portrait is-editing"><div><label for="portrait-name">企业名称</label><input id="portrait-name" type="text" maxlength="300" autocomplete="organization" value="${esc(task.company.name)}"></div>${rows}</div><div class="workspace-portrait-actions"><button type="button" class="text-button" data-action="portrait-cancel" data-task="${esc(task.id)}">取消</button><button type="button" class="button button-primary" data-action="portrait-save" data-task="${esc(task.id)}">保存</button></div>`;
   }
@@ -1319,20 +1494,18 @@
 
   function homeIntakeMarkup() {
     if (!homeIntake.open) return '';
-    return `<div class="start-intake" data-home-intake>${questionFields(homeIntake.answers)}<div class="intake-foot"><p class="match-hint" aria-live="polite">${esc(hintText(homeIntake.answers))}</p><div class="intake-foot-actions"><button type="button" class="button button-primary" data-action="home-intake-finish">确定 ${icon('arrow')}</button></div></div></div>`;
+    // 手册第 2 节：第一轮只有企业名称必填；行业、员工人数等由企业地图自动带出，其余按政策追问。
+    return `<div class="start-intake" data-home-intake><p class="start-intake-note">只需企业名称就能开始匹配。所属行业、员工人数等由企业地图自动带出，您确认即可；其余信息匹配到政策后再按需追问。</p><div class="intake-foot"><div class="intake-foot-actions"><button type="button" class="button button-primary" data-action="home-intake-finish">确定，开始匹配 ${icon('arrow')}</button></div></div></div>`;
   }
 
-  /* 首页和 3 个入口的表单一致（PRD 8.1.3）：企业名称 + 5 项选择，选完一项展开下一项。
-     所在地区、所属行业不在表单里问，先从企业接口取；接口没有时，匹配后正在申报少于 3 条才追问。 */
-  const quickRevealed = answers => revealedCount(answers);
-  const quickHint = answers => hintText(answers);
+  /* 首页和 3 个入口的表单一致（手册第 2 节）：只问企业名称。
+     所在地区、所属行业先从企业接口取；接口没有时，匹配后按需追问。 */
   function regionField(answers) {
     const options = [...fieldOptions('region'), '其他地区'];
     return `<fieldset class="intake-question"><legend>所在地区</legend><div class="match-options">${options.map(option => `<label class="match-option"><input type="radio" name="region" value="${esc(option)}"${answers.region === option ? ' checked' : ''}><span>${esc(option)}</span></label>`).join('')}</div></fieldset>`;
   }
   function quickIntakeMarkup(name = '', withRegion = false) {
-    const answers = homeIntake.answers;
-    return `<div class="intake-name-row"><label for="start-company-name">企业名称</label><input id="start-company-name" name="companyName" type="text" maxlength="300" required autocomplete="organization" placeholder="输入企业名称" value="${esc(name)}"></div><div class="start-intake" data-home-intake>${questionFields(answers, quickRevealed(answers))}<div class="intake-foot"><p class="match-hint" aria-live="polite">${esc(quickHint(answers))}</p><div class="intake-foot-actions"><button type="button" class="button button-primary" data-action="home-intake-finish">确定 ${icon('arrow')}</button></div></div></div>`;
+    return `<div class="intake-name-row"><label for="start-company-name">企业名称</label><input id="start-company-name" name="companyName" type="text" maxlength="300" required autocomplete="organization" placeholder="输入企业名称" value="${esc(name)}"></div><div class="start-intake" data-home-intake><p class="start-intake-note">只需企业名称，其余信息匹配到政策后按需追问。</p><div class="intake-foot"><div class="intake-foot-actions"><button type="button" class="button button-primary" data-action="home-intake-finish">确定 ${icon('arrow')}</button></div></div></div>`;
   }
 
   function finishHomeIntake(skip = false) {
@@ -1427,16 +1600,16 @@
     event.target.closest('.match-result')?.classList.toggle('only-open', onlyOpen);
   });
 
-  /* 被过滤的政策（已截止，以及地区、行业不符）不展示，只留正在申报和政策方向。 */
-  const visible = list => list.filter(item => item.status !== 'closed');
+  /* 已截止、以及第①步筛选（G1–G4）未通过的政策都不展示，matchPolicies 里统一处理。 */
 
-  /* 命中原因：按 PRD 8.2.3 的模板，从上到下挑，最多 2 条。只用已知信息，不说“一定能申请”。 */
+  /* 命中原因：从上到下挑，最多 2 条。只用已知信息，不说“一定能申请”。 */
   function hitReasons(task, { policy, status, reasons }, relax) {
     const out = [];
     if (relax) out.push(relax);
+    if (!out.length && !policyMetrics(task, policy).length) out.push('政策条件以定性要求为主，补充企业情况后我会逐项核对');
     const { region, industry } = factsOf(task);
     const metrics = policyMetrics(task, policy);
-    metrics.filter(m => m.have !== null && m.met).forEach(m => out.push(m.interval ? `${m.label}${m.display.includes('已确认') ? '已确认' : '（' + m.display + '）'}达到政策要求的 ${m.need} ${metricUnit(m.unit)}` : `您有 ${m.have} ${metricUnit(m.unit)}${m.label}，达到政策要求的 ${m.need} ${metricUnit(m.unit)}`));
+    metrics.filter(m => m.have !== null && m.met).forEach(m => out.push(m.op === 'has' ? `您已是${m.need}，符合申报主体要求` : m.interval ? `${m.label}${m.display.includes('已确认') ? '已确认' : '（' + m.display + '）'}达到政策要求的 ${m.need} ${metricUnit(m.unit)}` : `您有 ${m.have} ${metricUnit(m.unit)}${m.label}，达到政策要求的 ${m.need} ${metricUnit(m.unit)}`));
     const items = (policy.application?.checklist || []).filter(item => item.kind !== 'condition' && item.required !== false);
     const missing = items.filter(item => !task.sources?.some(source => source.id === `${policy.id}-${item.id}` && source.provided));
     if (items.length && !missing.length) out.push('申报材料已备齐，可以确认版本');
@@ -1448,13 +1621,13 @@
       else if (policy.region === '全国') out.push('全国范围的政策，不限地区');
       if (industry && policy.industries.includes(industry)) out.push(`您所在的${industry}属于政策支持行业`);
     }
-    reasons.forEach(reason => { if (!/和你选的地区一致|全国范围的政策|在这项政策涉及的行业内/.test(reason)) out.push(reason); });
+    (reasons || []).forEach(reason => { if (!/和你选的地区一致|全国范围的政策|在这项政策涉及的行业内/.test(reason)) out.push(reason); });
     return [...new Set(out)];
   }
 
   /* 放宽条件：地区只往上扩一级（市→省，本期没有区县）。企业所在市本来就会带上本省和全国的政策，
      放宽后多出来的是同省其他城市的政策。直辖市没有上一级，不出现“扩大地区范围”。 */
-  const regionParent = { 杭州市: '浙江省', 宁波市: '浙江省', 深圳市: '广东省', 广州市: '广东省', 南京市: '江苏省', 苏州市: '江苏省', 成都市: '四川省', 西安市: '陕西省' };
+  const regionParent = { 杭州市: '浙江省', 宁波市: '浙江省', 余姚市: '宁波市', 深圳市: '广东省', 广州市: '广东省', 南京市: '江苏省', 苏州市: '江苏省', 成都市: '四川省', 西安市: '陕西省' };
   const industryGroups = [
     { name: '国标门类 C 制造业', members: ['先进制造', '新能源', '生命健康'] },
     { name: '信息技术和科技服务', members: ['软件信息', '现代服务'] },
@@ -1487,7 +1660,12 @@
     const facts = factsOf(task), view = noHitView(task.id), id = esc(task.id);
     const frozen = Boolean(view.applied);
     const parent = regionParent[facts.region];
-    const rows = noHitRow(task, 'region', '扩大地区范围', parent ? [{ value: parent, label: `${facts.region} → ${parent}` }] : [], frozen ? view.applied.region : view.region, '', frozen);  // 行业不做筛选，不需要放宽
+    // G4 行业限定筛掉的政策，放宽行业（相邻行业）后能再看一遍；地区只往上扩一级。
+    const industryOptions = fieldOptions('industry').filter(option => option !== facts.industry);
+    const rows = [
+      noHitRow(task, 'region', '扩大地区范围', parent ? [{ value: parent, label: `${facts.region} → ${parent}` }] : [], frozen ? view.applied.region : view.region, '', frozen),
+      noHitRow(task, 'industry', '放宽行业', industryOptions, frozen ? view.applied.industry : view.industry, '', frozen),
+    ].filter(Boolean).join('');
     const canConfirm = view.industry || view.region;
     const failed = companyApiFailed(task), hasCompany = failed || companyNotFound(task);
     const focusAttrs = frozen ? '' : ' id="match-result-heading" tabindex="-1"';
@@ -1545,45 +1723,60 @@
   function resultMarkup(task) {
     // 查不到企业时，无命中卡片上面同样先提示核对企业名称（PRD 6.3 第 1、2 条）。
     if (noHit(factsOf(task))) return assistantBubble(noHitTitle(task), noHitCard(task, 'match'), 'match', true) + noHitRelaxed(task, 'match');
-    const matches = visible(matchPolicies(factsOf(task)));
+    // 已截止的政策在第①步就不参与匹配，这里不再过滤；合规记录提示放结果卡顶部（只扣不加）。
+    const matches = matchPolicies(factsOf(task));
     const openCount = matches.filter(item => item.status === 'open').length;
-    // 排序（PRD 8.1.4）：状态 → 档位（高、中、暂无法判断、低）→ 内部分值。
-    const statusOrder = { open: 0, notice: 1, closed: 2 };
+    // 排序（手册 P57）：档位（高、中、低、待确定）→ 达标度降序 → 截止时间近的在前；截止未知、常年可报排最后。
     const gradeRank = item => GRADE_ORDER[policyScore(task, item.policy)?.grade] ?? 9;
-    matches.sort((x, y) => statusOrder[x.status] - statusOrder[y.status] || gradeRank(x) - gradeRank(y) || (policyScore(task, y.policy)?.score ?? -1) - (policyScore(task, x.policy)?.score ?? -1));
-    const pickIndex = matches.findIndex(item => item.status === 'open' && (policyScore(task, item.policy)?.score ?? -1) >= FIRST_PICK_MIN);
+    const dueRank = item => item.policy.applicationEnd ? Date.parse(item.policy.applicationEnd) : Infinity;
+    matches.sort((x, y) => gradeRank(x) - gradeRank(y) || (policyScore(task, y.policy)?.score ?? -1) - (policyScore(task, x.policy)?.score ?? -1) || dueRank(x) - dueRank(y) || x.index - y.index);
+    const pickIndex = matches.findIndex(item => item.status === 'open' && policyScore(task, item.policy)?.grade === '高');
     const cards = matches.map((item, index) => compactCard(task, item, index === pickIndex)).join('');
-    const partial = answeredCount(answersOf(task)) < questions.length ? `<p class="match-partial">以下结果基于不完整信息，建议补充后重新匹配。<button type="button" class="text-button" data-action="company-edit-inline" data-task="${esc(task.id)}">补充企业信息</button></p>` : '';
+    const partial = answeredCount(answersOf(task)) < questions.length ? `<p class="match-partial">以下结果基于不完整信息，补充后匹配度更准。<button type="button" class="text-button" data-action="company-edit-inline" data-task="${esc(task.id)}">补充企业信息</button></p>` : '';
     const facts = factsOf(task);
     const regionHint = !facts.region || facts.region === '其他地区' ? `<p class="match-partial">补充所在地区，能看到地方政策。<button type="button" class="text-button" data-action="company-edit-inline" data-task="${esc(task.id)}">补充企业信息</button></p>` : '';
     const inlineCompany = companyInlineEditTasks.has(task.id);
-    const noticeMarkup = inlineCompany ? companyInlineEdit(task, 'result') : (notFoundNotice(task) + regionHint) || partial;
+    const noticeMarkup = inlineCompany ? companyInlineEdit(task, 'result') : [notFoundNotice(task), complianceNotice(task), regionHint || partial].filter(Boolean).join('');
     const card = `<div class="intake-card match-result${onlyOpen ? ' only-open' : ''}">${noticeMarkup}<div class="match-result-bar"><p id="match-result-heading" class="match-result-heading" tabindex="-1">有 ${openCount} 项政策正在申报</p>${onlyOpenToggle()}</div>${typeFilter(matches)}<div class="match-policy-grid">${cards}</div>${diagnosisCard(task)}${feedbackMarkup('match_result')}</div>`;
-    // 少于 3 条时的追问并进结果卡片底部，一次只回一张卡片。
+    // 按政策追问并进结果卡片底部，一次只回一张卡片。
     return assistantBubble(`「${task.company.name}」比对完了。`, card + followupBubble(task, openCount, matches.map(item => item.policy), true), 'match', true);
   }
 
-  /* 少于 3 条正在申报时追问一轮（PRD V2.2 8.1.3）：只问还空着的关键字段（地区、行业、企业规模、成立年限、企业类型），
-     每个任务只问一次；补充后重新匹配，跳过就按已有信息展示，空着的字段在画像里显示“待补充”。 */
+  /* 按政策追问（手册第 2 节）：匹配到政策后，政策用得上哪项就追问哪项；
+     正在申报少于 3 条时把地区、行业、员工人数这些关键字段也问一遍。每个任务只问一次。 */
   const FOLLOWUP_MIN = 3;
   const keyFieldOptions = {
-    scale: { label: '企业规模', options: ['20人以下', '20-99人', '100-299人', '300-999人', '1000人以上'] },
-    founded: { label: '成立年限', options: ['1年以内', '1-3年', '3-5年', '5-10年', '10年以上'] },
+    staff: { label: '员工人数', options: ['20人以下', '20-99人', '100-299人', '300-999人', '1000人以上'] },
   };
   function missingKeyFields(task) {
-    const answers = answersOf(task), facts = factsOf(task), notFound = companyNotFound(task);
+    const facts = factsOf(task);
     return [
       !facts.region && 'region',
       !facts.industry && 'industry',
-      !companyRows(task).find(([label]) => label === '企业规模')?.[1] && 'scale',
-      !companyRows(task).find(([label]) => label === '成立年限')?.[1] && 'founded',
-      !answers.type && 'type',
+      !facts.staff && 'staff',
     ].filter(Boolean);
+  }
+  /* 政策需要、企业还没填的追问字段（最多 3 个）。 */
+  function demandedFields(task, policies) {
+    const facts = factsOf(task);
+    const fields = [];
+    policies.filter(policy => statusOf(policy) === 'open').forEach(policy => {
+      [...(policy.demands || []), ...legacyMetrics(policy)].forEach(demand => {
+        if (demand.field === 'rdRatio') { ['rdFee', 'revenue'].forEach(key => { if (!fields.includes(key) && factOf(facts, key, key).state === 'empty') fields.push(key); }); return; }
+        if (!demand.field || fields.includes(demand.field)) return;
+        if (!questions.some(question => question.key === demand.field)) return;
+        const fact = factOf(facts, demand.legacy ? demand.key : demand.field, demand.field);
+        if (fact.state === 'empty') fields.push(demand.field);
+      });
+    });
+    return fields.slice(0, 3);
   }
   function keyFieldMarkup(key, answers) {
     if (key === 'region') return regionField(answers);
     if (key === 'industry') return industryField(answers);
-    const field = keyFieldOptions[key] || { label: labelOf(key), options: questions.find(question => question.key === key).options };
+    const def = questions.find(question => question.key === key);
+    if (def) return `<fieldset class="intake-question"><legend>${esc(def.label)}${def.type === 'number' ? `（${esc(def.unit || '')}）` : ''}</legend>${questionControl(def, answers)}</fieldset>`;
+    const field = keyFieldOptions[key] || { label: labelOf(key), options: questions.find(question => question.key === key)?.options || [] };
     return `<fieldset class="intake-question"><legend>${esc(field.label)}</legend><div class="match-options">${field.options.map(option => `<label class="match-option"><input type="radio" name="${key}" value="${esc(option)}"${answers[key] === option ? ' checked' : ''}><span>${esc(option)}</span></label>`).join('')}</div></fieldset>`;
   }
   // 跨门槛的区间条件（营收、研发费占比）：同一门槛只问一次，和关键字段放在同一轮追问里（PRD 8.1.3 / 8.1.4）。
@@ -1593,13 +1786,21 @@
   }
   const rangeFieldMarkup = item => `<fieldset class="intake-question"><legend>${esc(item.key === 'rd' ? `研发费占比达到 ${item.need}%？` : `营业收入达到 ${item.need} 万？`)}</legend><div class="match-options">${[['yes', '达到了'], ['no', '没达到'], ['unsure', '不确定']].map(([value, label]) => `<label class="match-option"><input type="radio" name="range|${esc(item.key)}|${item.need}" value="${value}"><span>${label}</span></label>`).join('')}</div><small class="range-ask-note">您选的是「${esc(item.pick)}」，跨过了政策要求</small></fieldset>`;
   function followupBubble(task, openCount, policies = [], inline = false) {
-    if (openCount >= FOLLOWUP_MIN || task.intake?.followupDone) return '';
-    const missing = missingKeyFields(task), ranges = rangeAsks(task, policies);
-    if (!missing.length && !ranges.length) return '';
-    const labels = [...missing.map(key => ({ region: '所在地区', industry: '所属行业', type: '企业类型' }[key] || keyFieldOptions[key].label)), ...ranges.map(item => item.key === 'rd' ? '研发费占比' : '营业收入')];
+    if (task.intake?.followupDone) return '';
+    const demanded = demandedFields(task, policies);
+    const ranges = rangeAsks(task, policies);
+    const missing = openCount < FOLLOWUP_MIN ? missingKeyFields(task) : [];
+    if (!demanded.length && !missing.length && !ranges.length) return '';
+    const labels = [
+      ...demanded.map(key => labelOf(key)),
+      ...missing.map(key => ({ region: '所在地区', industry: '所属行业' }[key] || keyFieldOptions[key].label)),
+      ...ranges.map(item => item.key === 'rd' ? '研发费占比' : '营业收入'),
+    ];
     const id = esc(task.id);
-    const ask = `正在申报的政策只有 ${openCount} 项。补充${[...new Set(labels)].join('、')}，可能找到更多适合的政策。`;
-    const body = `<div class="intake-card intake-followup" data-task="${id}">${missing.map(key => keyFieldMarkup(key, answersOf(task))).join('')}${ranges.map(rangeFieldMarkup).join('')}<div class="intake-foot is-end"><button type="button" class="button button-secondary" data-action="followup-skip" data-task="${id}">跳过</button><button type="button" class="button button-primary" data-action="followup-submit" data-task="${id}">补充后重新匹配</button></div></div>`;
+    const ask = demanded.length
+      ? `匹配到的政策需要${[...new Set(labels)].join('、')}，补充后能判断匹配度。`
+      : `正在申报的政策只有 ${openCount} 项。补充${[...new Set(labels)].join('、')}，可能找到更多适合的政策。`;
+    const body = `<div class="intake-card intake-followup" data-task="${id}">${[...demanded, ...missing].map(key => keyFieldMarkup(key, answersOf(task))).join('')}${ranges.map(rangeFieldMarkup).join('')}<div class="intake-foot is-end"><button type="button" class="button button-secondary" data-action="followup-skip" data-task="${id}">跳过</button><button type="button" class="button button-primary" data-action="followup-submit" data-task="${id}">补充后重新匹配</button></div></div>`;
     return inline ? `<div class="followup-inline"><p class="followup-ask">${esc(ask)}</p>${body}</div>` : assistantBubble(ask, body, 'match');
   }
 
@@ -1658,7 +1859,7 @@
     if (task.intake.stage !== 'ready') return intakeMarkup(task);
     // 匹配开始后，前面的问答（选几项、核对画像、确认）留在对话里，保证一问一答。
     const known = portraitRows(task).filter(([, value]) => value).length;
-    const before = `${assistantBubble(`想帮「${task.company.name}」匹配政策，先了解几项情况，点选就行。`)}${userBubble(answersSummary(answersOf(task)))}${assistantBubble('请核对企业画像，确认后开始匹配。', `<div class="intake-card intake-done"><p>企业画像已了解 ${known}/${PORTRAIT_LABELS.length} 项，右侧可以查看和补充。</p></div>`)}${userBubble('确认企业信息，开始匹配')}`;
+    const before = `${assistantBubble(`想帮「${task.company.name}」匹配政策，只需企业名称就能开始，其余信息匹配到政策后按需追问。`)}${userBubble(answersSummary(answersOf(task)))}${assistantBubble('请核对企业画像，确认后开始匹配。', `<div class="intake-card intake-done"><p>企业画像已了解 ${known}/${PORTRAIT_LABELS.length} 项，右侧可以查看和补充。</p></div>`)}${userBubble('确认企业信息，开始匹配')}`;
     return `${before}<div id="match-app" class="match-app">${chatInner(task)}</div>`;
   }
 
@@ -1776,7 +1977,10 @@
     if (action === 'followup-submit' || action === 'followup-skip') {
       const current = S().getTask(target.dataset.task);
       if (!current) return true;
-      const picked = action === 'followup-skip' ? {} : Object.fromEntries([...(target.closest('.intake-followup')?.querySelectorAll('input[type="radio"]:checked') || [])].map(input => { const [kind, key, need] = input.name.split('|'); return kind === 'range' ? [rangeKey(key, need), input.value] : [input.name, input.value]; }));
+      const picked = action === 'followup-skip' ? {} : Object.fromEntries([
+        ...[...(target.closest('.intake-followup')?.querySelectorAll('input[type="radio"]:checked') || [])].map(input => { const [kind, key, need] = input.name.split('|'); return kind === 'range' ? [rangeKey(key, need), input.value] : [input.name, input.value]; }),
+        ...[...(target.closest('.intake-followup')?.querySelectorAll('input[type="number"]') || [])].filter(input => input.value !== '').map(input => [input.name, input.value]),
+      ]);
       if (action === 'followup-submit' && !Object.keys(picked).length) { window.PolicyUI.toast('还没有选择，可以点“跳过”。'); return true; }
       setIntake(current, { followupDone: true, answers: { ...answersOf(current), ...picked } });
       if (action === 'followup-skip') { window.PolicyUI.refresh(); window.PolicyUI.toast('先按已有信息展示，之后可以在画像里补充。'); return true; }
@@ -1989,11 +2193,13 @@
       revealNext(home, homeIntake.answers);
       return;
     }
-    const form = input?.closest?.('.intake-form');
-    if (input?.type !== 'radio' || !form) return;
+    const form = input?.closest?.('.intake-form, .intake-followup');
+    if ((input?.type !== 'radio' && input?.type !== 'number') || !form) return;
     const task = S().getTask(form.dataset.task);
     if (!task) return;
-    const answers = { ...answersOf(task), [input.name]: input.value };
+    // 数值字段清空视为删除（回到“待补充”）。
+    const answers = { ...answersOf(task) };
+    if (input.value === '') delete answers[input.name]; else answers[input.name] = input.value;
     setIntake(task, { answers });
     // 画像跟着选择实时更新，不重绘对话。
     const portrait = document.querySelector('.workspace-summary');
@@ -2130,14 +2336,14 @@
       ['所在地区', policy.region === '全国' ? '不限地区' : policy.region, facts.region ? known(facts.region, '企业接口') : chips('region', [...fieldOptions('region'), '其他地区'], '')],
       ['所属行业', policy.industries.join('、') || '以原文为准', facts.industry ? known(facts.industry, '企业接口') : chips('industry', [...fieldOptions('industry'), '其他行业'], '')],
     ];
-    policyRules(policy).forEach(rule => {
-      const need = `≥ ${rule.need}${rule.unit === '%' ? '' : ' '}${rule.unit}`;
+    policyMetrics(task, policy).forEach(rule => {
+      const need = `${rule.op || '≥'} ${rule.need}${rule.unit === '%' ? '' : ' '}${rule.unit}`;
       if (rule.interval) {
         const question = questions.find(item => item.key === rule.key);
-        rows.push([rule.label, need, answers[rule.key] ? known(answers[rule.key], '您填写的') : chips(rule.key, question.options, '')]);
+        const options = question ? question.options : (RANGES[rule.key] ? Object.keys(RANGES[rule.key]) : []);
+        rows.push([rule.label, need, answers[rule.key] ? known(answers[rule.key], '您填写的') : chips(rule.key, options, '')]);
       } else {
-        const have = data[rule.key];
-        rows.push([rule.label, need, have === null || have === undefined ? '<span class="policy-check-value is-empty">待核实<small>可在政策详情里补充</small></span>' : known(`${have} ${rule.unit}`, '企业接口')]);
+        rows.push([rule.label, need, rule.display && rule.status !== 'unknown' && rule.status !== 'tbc' ? known(rule.display, rule.legacy ? '您填写的' : '企业接口') : '<span class="policy-check-value is-empty">待核实<small>可在政策详情里补充</small></span>']);
       }
     });
     return rows;
@@ -2168,7 +2374,7 @@
     const warn = misses.length ? `<div class="policy-check-warn"><p>${esc(misses.join('；'))}。可以换一项政策，也可以继续准备。</p><a href="#dashboard?work=assembly" data-action="nav-work" data-work="assembly">换一项政策</a></div>` : '';
     const pending = result?.pending ? `<p class="policy-check-pending">还有 ${result.pending} 项待补充，补充后匹配度更准。<button type="button" class="text-button" data-action="match-drawer" data-task="${esc(task.id)}" data-policy="${esc(policy.id)}">查看条件对照</button></p>` : '';
     const card = warn || pending || rangeAskInline(task, policy) ? `<div class="intake-card policy-check-result">${warn}${rangeAskInline(task, policy)}${pending}</div>` : '';
-    const head = misses.length ? `「${policy.title}」对照完了：匹配度 ${result?.grade || '暂无法判断'}，${misses.length ? '有一项要先核对' : ''}。` : `「${policy.title}」对照完了：匹配度 ${result?.grade || '暂无法判断'}。`;
+    const head = misses.length ? `「${policy.title}」对照完了：档位 ${result?.grade || '待确定'}，${misses.length ? '有一项要先核对' : ''}。` : `「${policy.title}」对照完了：档位 ${result?.grade || '待确定'}。`;
     return { text: `${head}下面按清单准备材料。`, card };
   }
   function policyCheckNote(task) {
@@ -2335,5 +2541,27 @@
   }
   try { syncApplications(); } catch (error) { console.error('材料清单同步失败', error); }
 
+  /* 匹配规则调试接口（verify-match-rules.mjs 用）：对一个企业跑完整三步，
+     返回每条政策的候选范围、筛选结果、归口、逐条条件判定与分值、达标度、档位。 */
+  function matchDebug(name, answers = {}) {
+    const task = { id: `debug-${Date.now()}`, title: '', request: '', company: { name, region: '', industry: '' }, intake: { stage: 'ready', answers, files: [] }, sources: [], steps: {}, requirements: [], policyId: '' };
+    const facts = factsOf(task);
+    return {
+      facts: { region: facts.region, industry: facts.industry, type: facts.type, staff: facts.staff, foundedYears: facts.foundedYears, compliance: facts.compliance, ip: facts.ip },
+      policies: publicPolicies().map(policy => {
+        const inScope = statusOf(policy) !== 'closed';
+        const gate = gateOf(policy, facts);
+        const result = inScope && gate.pass ? policyScore(task, policy) : null;
+        const rows = inScope ? comparisonRows(task, policy) : [];
+        return {
+          id: policy.id, title: policy.title, agency: policy.agency, bureau: bureauOf(policy),
+          status: statusOf(policy), inScope, gate: gate.fails,
+          conditions: rows.filter(row => row.key !== 'materials' && row.key !== 'region' && row.key !== 'industry').map(row => ({ field: row.key, label: row.label, w: row.w, isRequired: row.isRequired || undefined, status: row.status, exceed: row.exceed || undefined, require: row.required, current: row.current })),
+          score: result?.score ?? null, grade: result?.grade ?? null,
+        };
+      }),
+    };
+  }
+  window.PolicyRulesDebug = Object.freeze({ matchDebug, WEIGHTS, bureauOf, gateOf, judgeDemand });
   window.PolicyMatch = Object.freeze({ statusOf, daysLeft, windowText, confOf, pickTranscript, policyCheckLead, guideSteps, userBubble, expiredNotice, pickComposer, prepOpen, policyFirstMarkup, policyCheckMarkup, policyCheckNote, guidanceCheckMarkup, resetPick, stepInfo, apiProfile, portraitRows, PORTRAIT_LABELS, companyNotFound, resetGuest, noTemplateNotice, quickIntakeMarkup, assemblyPicker, refreshMaterialReview, forgetUpload, closeDrawer, handleClick, intakeActive, intakeMarkup, matchChatMarkup, matchPending, openCount, composerAttach, questions, understanding, beginPortrait, portraitLoading, portraitEditing, portraitEditor, scoreText, scoreLine, openMaterialReview, reviewMaterial, materialAdvice, maskedHtml, companyRows, policyMetrics, openHomeIntake, homeIntakeMarkup, rememberUpload, adoptUploads, uploadsMarkup, isSourceBlocked, markSourceBlocked, clearSourceBlocked, forgetBlockedSources, interpretMarkup, interpretPicking, guestMarkup, guestAsk, finishGuest, applicationIntro, applicationNote, guidanceMarkup, guidanceDetail, policyDetail, versionReview });
 })();

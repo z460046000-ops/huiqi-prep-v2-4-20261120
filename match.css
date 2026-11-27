@@ -639,3 +639,36 @@ a.conf-tag.is-link:hover{opacity:.85}
 .chat-regen-button .icon{width:13px;height:13px}
 .chat-regen-button:hover{color:#1f5fd6}
 .chat-regen-pending{color:#8a95a5}
+
+/* 2026-11-26 新匹配规则手册：合规记录提示、诊断四块、必备标记、优势项 */
+.compliance-notice{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;padding:10px 14px;border:1px solid #f3d9a4;border-radius:12px;background:#fffaf0;font-size:13px;color:#7a5a17}
+.compliance-notice p{margin:0}
+.compliance-notice.is-severe{border-color:#f3c1b4;background:#fdf3f0;color:#9c3d24}
+.compliance-notice .text-button{flex:none;color:inherit}
+.compliance-notice .text-button:hover{opacity:.8}
+
+.interpret-diagnosis{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:14px 0 4px}
+.diag-block{padding:12px 14px;border:1px solid #e3e9f2;border-radius:12px;background:#fbfcfe}
+.diag-block h4{margin:0 0 8px;font-size:13px;font-weight:600;color:#33415e}
+.diag-block ul{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+.diag-block li{font-size:13px;color:#4a5568;line-height:1.55;word-break:break-word}
+.diag-block li small{display:block;color:#8a95a5;font-size:12px}
+.diag-block li.is-required b{display:inline-block;margin-right:6px;padding:0 8px;border-radius:999px;background:#fdece8;color:#b3402a;font-size:12px;font-weight:600;line-height:1.7}
+.diag-block.is-met{background:#f4faf6;border-color:#d9eede}
+.diag-block.is-met h4{color:#1d7a4f}
+.diag-block.is-gap{background:#fdf6f4;border-color:#f3d9cf}
+.diag-block.is-gap h4{color:#b3402a}
+.diag-block.is-todo{background:#fffaf0;border-color:#f0e2c0}
+.diag-block.is-todo h4{color:#9a6d1b}
+.diag-block.is-confirm{background:#f7f9fd;border-color:#e0e7f4}
+.diag-block.is-confirm h4{color:#33508f}
+.diag-block .text-button{margin-top:8px;font-size:12px;color:#b3402a}
+.diag-advantage{display:inline-block;margin-left:6px;padding:0 8px;border-radius:999px;background:#e4f5ea;color:#1d7a4f;font-size:11px;font-style:normal;font-weight:600;line-height:1.7;vertical-align:1px}
+
+.comparison-required{display:inline-block;margin-right:6px;padding:0 7px;border-radius:999px;background:#fdece8;color:#b3402a;font-size:11px;font-style:normal;font-weight:600;line-height:1.7}
+.comparison-state.is-advantage{background:#e4f5ea;color:#1d7a4f}
+
+.start-intake-note{margin:10px 0 2px;font-size:13px;color:#6b7585;line-height:1.6}
+.match-options-number .match-option{flex:0 0 auto;min-width:200px;gap:8px}
+.match-options-number .match-option input{width:110px;padding:8px 10px;border:1px solid #d6dfeb;border-radius:10px;font-size:14px;color:#141c2b;background:#fff}
+.match-options-number .match-option span{color:#8a95a5;font-size:13px}
