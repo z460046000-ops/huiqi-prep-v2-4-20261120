@@ -95,10 +95,10 @@
     // 地区和行业来自企业数据，有才显示。
     const region=task.company.region||answers.region,industry=task.company.industry||answers.industry;
     const rows=window.PolicyMatch?.portraitRows(task)||[['企业名称',task.company.name]];
-    const known=rows.filter(([,value])=>value).length;
     const open=window.PolicyMatch?.openCount(task);
+    const editing=window.PolicyMatch?.portraitEditing(task.id);
     // 企业画像卡下面不再列“企业资料”（2026-11-12 用户要求，三个入口都去掉）。
-    return `<section class="context-card workspace-summary"><header class="context-card-heading"><h2>企业画像</h2><span>已了解 ${known}/${rows.length}</span></header>${window.PolicyMatch?.companyNotFound(task)?'<p class="portrait-notfound">没有查到工商信息，以下只有您填写的内容</p>':''}${window.PolicyMatch?.portraitEditing(task.id) ? window.PolicyMatch.portraitEditor(task) : `<dl class="workspace-portrait">${rows.map(([label,value])=>`<div><dt>${E(label)}</dt><dd${value?'':' class="is-empty"'}>${E(value||'待补充')}</dd></div>`).join('')}${typeof open==='number'?`<div><dt>可申报政策</dt><dd>${open} 项</dd></div>`:''}</dl><button type="button" class="text-button workspace-portrait-edit" data-action="portrait-edit" data-task="${E(task.id)}">补充企业信息</button>`}</section>`;
+    return `<section class="context-card workspace-summary"><header class="context-card-heading"><h2>企业画像</h2>${editing?'':`<button type="button" class="text-button workspace-portrait-edit" data-action="portrait-edit" data-task="${E(task.id)}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M17.6 3.4a2 2 0 0 1 2.8 2.8L12 14.6 8.5 15.5l.9-3.5z"/></svg>编辑信息</button>`}</header>${window.PolicyMatch?.companyNotFound(task)?'<p class="portrait-notfound">没有查到工商信息，以下只有您填写的内容</p>':''}${editing ? window.PolicyMatch.portraitEditor(task) : `<dl class="workspace-portrait">${rows.map(([label,value])=>`<div><dt>${E(label)}</dt><dd${value?'':' class="is-empty"'}>${E(value||'待补充')}</dd></div>`).join('')}${typeof open==='number'?`<div><dt>可申报政策</dt><dd>${open} 项</dd></div>`:''}</dl>`}</section>`;
   }
   function renderContext(task, item, {content='',route='task',capabilities=false}={}) {
     const E=U().escape,I=U().icon;

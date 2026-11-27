@@ -245,8 +245,8 @@
     const rows = all.filter(([label, value]) => value || !followLabels.has(label));
     const known = all.filter(([, value]) => value).length;  // 与右侧画像卡同一口径：分母是全部画像字段
     const notFound = companyNotFound(task) ? '<p class="confirm-note">没有查到工商信息，以下只有您填写的内容。</p>' : '';
-    const regionPick = factsOf(task).region ? '' : `<div class="confirm-region">${regionField(answersOf(task))}<small>选所在地区，能看到地方政策；可以不选，不选只看全国政策。</small></div>`;
-    return assistantBubble('请核对企业画像，确认后开始匹配。', `<div class="intake-card portrait-confirm"><header><strong>企业画像</strong><span>已了解 ${known}/${all.length}</span></header>${notFound}<dl>${rows.map(([label, value]) => `<div><dt>${esc(label)}</dt><dd${value ? '' : ' class="is-empty"'}>${esc(value || '待补充')}</dd></div>`).join('')}</dl><p class="confirm-note">营业收入、研发费用等其余 ${questions.length} 项不在这里问，匹配到政策后按需要追问。</p>${regionPick}<div class="intake-foot is-end"><button type="button" class="text-button" data-action="intake-edit" data-task="${id}">修改</button><button type="button" class="button button-primary" data-action="intake-confirm" data-task="${id}">确认企业信息，开始匹配 ${icon('arrow')}</button></div></div>`);
+    // 所在地区由企业数据库带出，确认卡不再让用户选；没有时用户可点“修改”补充。
+    return assistantBubble('请核对企业画像，确认后开始匹配。', `<div class="intake-card portrait-confirm"><header><strong>企业画像</strong><span>已了解 ${known}/${all.length}</span></header>${notFound}<dl>${rows.map(([label, value]) => `<div><dt>${esc(label)}</dt><dd${value ? '' : ' class="is-empty"'}>${esc(value || '待补充')}</dd></div>`).join('')}</dl><div class="intake-foot is-end"><button type="button" class="text-button" data-action="intake-edit" data-task="${id}">修改</button><button type="button" class="button button-primary" data-action="intake-confirm" data-task="${id}">确认企业信息，开始匹配 ${icon('arrow')}</button></div></div>`);
   }
   function fieldsCard(task) {
     const answers = answersOf(task);
@@ -1209,7 +1209,7 @@
     closeDrawer();
     resetPick();
     Object.assign(guest, { policyId: '', messages: [], applying: false });
-    Object.assign(homeIntake, { open: false, answers: {} });
+    Object.assign(homeIntake, { open: false, answers: {}, shown: 1 });
   }
 
   function handleGuest(action, target) {
@@ -1489,13 +1489,37 @@
   }
 
   /* ---------- 首页：填完名称原地展开，确定或跳过后才建项目 ---------- */
-  const homeIntake = { open: false, answers: {} };
+  const homeIntake = { open: false, answers: {}, shown: 1 };
   const openHomeIntake = () => { homeIntake.open = true; };
 
+  // 首页确认卡：6 个选填问题分步出现，答完一步露出下一步；不填也能直接确定。
+  // 研发费用和纳税总额同一行。
+  const HOME_STEPS = [['revenue'], ['staff'], ['rdFee', 'tax'], ['rdShare'], ['profit']];
+  const HOME_ASKS = HOME_STEPS.flat();
+  const HOME_LABELS = { revenue: '营业收入', staff: '员工人数', rdFee: '研发费用', rdShare: '研发人员占比', profit: '利润总额', tax: '纳税总额' };
+  const homeLeft = answers => HOME_ASKS.filter(key => !answers[key]).length;
+  const homeHint = answers => homeLeft(answers) ? `再填 ${homeLeft(answers)} 项，匹配更准` : '已填完，可以开始匹配';
+  function homeControl(key) {
+    const a = homeIntake.answers, def = questions.find(question => question.key === key);
+    if (def?.type === 'number') return `<span class="home-optional-num"><input type="number" name="${key}" min="0" step="any" inputmode="decimal" aria-label="${HOME_LABELS[key]}" value="${esc(a[key] || '')}"><em>${esc(def.unit)}</em></span>`;
+    const options = def ? def.options : keyFieldOptions[key].options;
+    return `<div class="home-optional-chips">${options.map(option => `<label class="match-option"><input type="radio" name="${key}" value="${esc(option)}"${a[key] === option ? ' checked' : ''}><span>${esc(option)}</span></label>`).join('')}</div>`;
+  }
+  function homeStepMarkup([first, ...rest], index) {
+    const extra = rest.map(key => `<span class="home-optional-pair"><span class="home-optional-label">${HOME_LABELS[key]}</span>${homeControl(key)}</span>`).join('');
+    return `<div class="home-step${index === homeIntake.shown - 1 && index ? ' is-new' : ''}" data-home-step="${index}"${index >= homeIntake.shown ? ' hidden' : ''}><span class="home-optional-label">${HOME_LABELS[first]}</span><div class="home-optional-row">${homeControl(first)}${extra}</div></div>`;
+  }
   function homeIntakeMarkup() {
     if (!homeIntake.open) return '';
-    // 手册第 2 节：第一轮只有企业名称必填；行业、员工人数等由企业地图自动带出，其余按政策追问。
-    return `<div class="start-intake" data-home-intake><p class="start-intake-note">只需企业名称就能开始匹配。所属行业、员工人数等由企业地图自动带出，您确认即可；其余信息匹配到政策后再按需追问。</p><div class="intake-foot"><div class="intake-foot-actions"><button type="button" class="button button-primary" data-action="home-intake-finish">确定，开始匹配 ${icon('arrow')}</button></div></div></div>`;
+    return `<div class="start-intake" data-home-intake><div class="home-optional-grid">${HOME_STEPS.map(homeStepMarkup).join('')}</div><div class="intake-foot"><p class="home-optional-skip" data-home-hint>${homeHint(homeIntake.answers)}</p><div class="intake-foot-actions"><button type="button" class="button button-primary" data-action="home-intake-finish">确定 ${icon('arrow')}</button></div></div></div>`;
+  }
+  // 答了第 n 步就露出第 n+1 步；已露出的不再收起。
+  function homeRevealNext(home, key) {
+    const step = HOME_STEPS.findIndex(keys => keys.includes(key));
+    if (step < 0 || step + 2 <= homeIntake.shown) return;
+    homeIntake.shown = Math.min(HOME_STEPS.length, step + 2);
+    const next = home.querySelector(`[data-home-step="${homeIntake.shown - 1}"]`);
+    if (next) { next.hidden = false; next.classList.add('is-new'); }
   }
 
   /* 首页和 3 个入口的表单一致（手册第 2 节）：只问企业名称。
@@ -1515,7 +1539,7 @@
     const work = document.querySelector('#company-start-form')?.dataset.work || 'match';
     const task = S().createTask({ title: `${name} · 政策申报`, request: `为${name}查找适用政策并准备申报材料。`, company: { name, ...apiProfile(name) }, ...(work === 'assembly' ? { policyId: 'no-policy' } : {}), intake: { stage: 'fields', answers: { ...homeIntake.answers }, files: [] } });
     if (!task) { window.PolicyUI.toast('未能创建，请重试。'); return; }
-    Object.assign(homeIntake, { open: false, answers: {} });
+    Object.assign(homeIntake, { open: false, answers: {}, shown: 1 });
     window.PolicyUI.clearCompanyDraft();
     // V2.2：只有一个“确定”，字段都不是必填；点了先核对画像再匹配。
     if (work === 'match') { askConfirm(task); return; }
@@ -2190,7 +2214,13 @@
     const home = input?.closest?.('[data-home-intake]');
     if (input?.type === 'radio' && home) {
       homeIntake.answers[input.name] = input.value;
-      revealNext(home, homeIntake.answers);
+      homeRevealNext(home, input.name);
+      const hint = home.querySelector('[data-home-hint]'); if (hint) hint.textContent = homeHint(homeIntake.answers);
+      return;
+    }
+    if (input?.type === 'number' && home) {
+      if (input.value === '') delete homeIntake.answers[input.name]; else { homeIntake.answers[input.name] = input.value; homeRevealNext(home, input.name); }
+      const hint = home.querySelector('[data-home-hint]'); if (hint) hint.textContent = homeHint(homeIntake.answers);
       return;
     }
     const form = input?.closest?.('.intake-form, .intake-followup');

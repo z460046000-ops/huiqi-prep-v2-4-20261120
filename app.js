@@ -103,12 +103,24 @@
   const escape = (value = '') => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.file}"/></svg>`;
   let toastTimer;
-  function toast(message) {
+  // 全局提示统一在页面顶部居中（参考 Arco Message：顶部、带类型图标、3 秒自动消失）。
+  const toastType = message => /失败|未能|不能|没能|没有找到|读不|请重试|还是/.test(message) ? 'error'
+    : /^(已|结果已|项目已|资料已|任务已)/.test(message) ? 'success'
+    : /^(请|先|还没有|每个|取得|这份材料没有|尚未)/.test(message) ? 'warning' : 'info';
+  const toastIcons = {
+    info: '<circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 11v6M12 7.5v.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>',
+    success: '<circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m7.5 12.2 3 3 6-6.2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    warning: '<circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 7v6M12 16.5v.5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>',
+    error: '<circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m8.8 8.8 6.4 6.4M15.2 8.8l-6.4 6.4" stroke="#fff" stroke-width="2" stroke-linecap="round"/>',
+  };
+  function toast(message, type = toastType(String(message))) {
     const target = document.querySelector('#toast');
     clearTimeout(toastTimer);
-    target.textContent = message;
+    target.className = `toast toast-${type}`;
+    target.innerHTML = `<svg class="toast-icon" viewBox="0 0 24 24" aria-hidden="true">${toastIcons[type] || toastIcons.info}</svg><span>${escape(message)}</span>`;
     target.hidden = false;
-    toastTimer = setTimeout(() => { target.hidden = true; }, 5200);
+    target.classList.remove('is-in'); void target.offsetWidth; target.classList.add('is-in');
+    toastTimer = setTimeout(() => { target.hidden = true; }, 3000);
   }
   // 示例内容写成当前企业，不带入别家公司的名称。
   const sampleFor = (task,text) => String(text).replaceAll('杭州澄川数字科技有限公司',task.company.name || '本企业').replaceAll('注册地区：杭州市',`注册地区：${task.company.region || '待补充'}`).replaceAll('澄川协同管理软件','协同管理软件');
@@ -557,10 +569,20 @@
     if(form){delete form.dataset.draftSaved;captureFormDraft();}
   });
   function formError(form,message) {
-    let box = form.querySelector('.form-error');
-    if (!box) {box=document.createElement('p');box.className='form-error';box.setAttribute('role','alert');form.prepend(box);}
-    box.textContent=message;toast(message);
+    // 报错只在页面顶部的全局提示里出现，不再在表单上方另插一条。
+    form.querySelector('.form-error')?.remove();
+    toast(message,'warning');
+    const field=form.querySelector('input:not([type=hidden]),textarea');
+    field?.setAttribute('aria-invalid','true');
   }
+  // 浏览器自带的必填气泡不显示，统一改为顶部全局提示。
+  document.addEventListener('invalid', event => {
+    event.preventDefault();
+    const field=event.target;
+    toast(field.name==='companyName' ? '请填写企业名称，最多300字。' : (field.validationMessage || '请检查填写内容。'),'warning');
+    field.focus?.({preventScroll:true});
+  }, true);
+  document.addEventListener('input', event => { if (event.target?.getAttribute?.('aria-invalid')) event.target.removeAttribute('aria-invalid'); });
   document.addEventListener('submit', event => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
